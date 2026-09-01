@@ -1,5 +1,6 @@
 use supply_chain_control_plane::{
     EvidenceReference, GraphError, SupplyEvent, SupplyEventKind, SupplyGraph, SupplyNodeKind,
+    UpsertOutcome,
 };
 
 fn evidence() -> EvidenceReference {
@@ -197,6 +198,147 @@ fn duplicate_edges_and_events_are_not_silently_overwritten() {
 }
 
 #[test]
+fn item_level_upserts_are_idempotent_for_exact_replays_and_fail_on_conflicts() {
+    let mut graph = SupplyGraph::new();
+
+    assert_eq!(
+        graph
+            .upsert_node(" supplier-alpha ", SupplyNodeKind::Supplier)
+            .unwrap(),
+        UpsertOutcome::Inserted
+    );
+    assert_eq!(
+        graph
+            .upsert_node("supplier-alpha", SupplyNodeKind::Supplier)
+            .unwrap(),
+        UpsertOutcome::Unchanged
+    );
+    assert_eq!(
+        graph.upsert_node("supplier-alpha", SupplyNodeKind::Facility),
+        Err(GraphError::ConflictingNode("supplier-alpha".into()))
+    );
+
+    graph
+        .upsert_node("facility-east", SupplyNodeKind::Facility)
+        .unwrap();
+    let edge_evidence = dependency_evidence("edge-replay");
+    assert_eq!(
+        graph
+            .upsert_dependency("supplier-alpha", "facility-east", edge_evidence.clone())
+            .unwrap(),
+        UpsertOutcome::Inserted
+    );
+    assert_eq!(
+        graph
+            .upsert_dependency(
+                " supplier-alpha ",
+                " facility-east ",
+                edge_evidence.clone()
+            )
+            .unwrap(),
+        UpsertOutcome::Unchanged
+    );
+    assert_eq!(
+        graph.upsert_dependency(
+            "supplier-alpha",
+            "facility-east",
+            dependency_evidence("edge-conflict"),
+        ),
+        Err(GraphError::ConflictingDependency {
+            upstream_node: "supplier-alpha".into(),
+            downstream_node: "facility-east".into(),
+        })
+    );
+
+    let event = SupplyEvent::new(
+        "event-replay",
+        "supplier-alpha",
+        SupplyEventKind::ProductionStopped,
+        "2026-09-01T13:00:00Z",
+        evidence(),
+    )
+    .unwrap();
+    assert_eq!(
+        graph.upsert_event(event.clone()).unwrap(),
+        UpsertOutcome::Inserted
+    );
+    assert_eq!(
+        graph.upsert_event(event).unwrap(),
+        UpsertOutcome::Unchanged
+    );
+    let conflicting_event = SupplyEvent::new(
+        "event-replay",
+        "supplier-alpha",
+        SupplyEventKind::ProductionStopped,
+        "2026-09-01T13:01:00Z",
+        evidence(),
+    )
+    .unwrap();
+    assert_eq!(
+        graph.upsert_event(conflicting_event),
+        Err(GraphError::ConflictingEvent("event-replay".into()))
+    );
+
+    let impacts = graph.downstream_impacts("event-replay").unwrap();
+    assert_eq!(impacts.len(), 1);
+    assert_eq!(impacts[0].node_key(), "facility-east");
+    assert_eq!(
+        impacts[0].dependency_evidence(),
+        std::slice::from_ref(&edge_evidence)
+    );
+}
+
+#[test]
+fn upsert_validation_preserves_graph_invariants() {
+    let mut graph = SupplyGraph::new();
+    graph
+        .upsert_node("supplier-alpha", SupplyNodeKind::Supplier)
+        .unwrap();
+
+    assert_eq!(
+        graph.upsert_node(" ", SupplyNodeKind::Supplier),
+        Err(GraphError::BlankField("supply_node_key"))
+    );
+    assert_eq!(
+        graph.upsert_dependency(
+            "supplier-alpha",
+            "supplier-alpha",
+            dependency_evidence("edge-self-upsert"),
+        ),
+        Err(GraphError::SelfDependency("supplier-alpha".into()))
+    );
+    assert_eq!(
+        graph.upsert_dependency(
+            "missing-upstream",
+            "supplier-alpha",
+            dependency_evidence("edge-missing-upstream"),
+        ),
+        Err(GraphError::UnknownNode("missing-upstream".into()))
+    );
+    assert_eq!(
+        graph.upsert_dependency(
+            "supplier-alpha",
+            "missing-downstream",
+            dependency_evidence("edge-missing-downstream"),
+        ),
+        Err(GraphError::UnknownNode("missing-downstream".into()))
+    );
+
+    let missing_node_event = SupplyEvent::new(
+        "event-missing-node",
+        "missing-downstream",
+        SupplyEventKind::InventoryUnavailable,
+        "2026-09-01T13:02:00Z",
+        evidence(),
+    )
+    .unwrap();
+    assert_eq!(
+        graph.upsert_event(missing_node_event),
+        Err(GraphError::UnknownNode("missing-downstream".into()))
+    );
+}
+
+#[test]
 fn equal_length_routes_choose_a_stable_shortest_path_with_aligned_evidence() {
     let mut graph = SupplyGraph::new();
     for (node_key, node_kind) in [
@@ -366,6 +508,21 @@ fn graph_errors_have_stable_operator_facing_messages() {
                 downstream_node: "node-b".into(),
             },
             "dependency already exists: node-a -> node-b",
+        ),
+        (
+            GraphError::ConflictingNode("node-a".into()),
+            "node replay conflicts with existing value: node-a",
+        ),
+        (
+            GraphError::ConflictingEvent("event-a".into()),
+            "event replay conflicts with existing value: event-a",
+        ),
+        (
+            GraphError::ConflictingDependency {
+                upstream_node: "node-a".into(),
+                downstream_node: "node-b".into(),
+            },
+            "dependency replay conflicts with existing value: node-a -> node-b",
         ),
         (
             GraphError::UnknownNode("node-a".into()),
