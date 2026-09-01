@@ -8,7 +8,7 @@ fn evidence() -> EvidenceReference {
 }
 
 #[test]
-fn disruption_reachability_is_directional_deterministic_and_cycle_safe() {
+fn disruption_reachability_is_directional_deterministic_cycle_safe_and_explainable() {
     let mut graph = SupplyGraph::new();
     graph
         .add_node("supplier-alpha", SupplyNodeKind::Supplier)
@@ -55,6 +55,10 @@ fn disruption_reachability_is_directional_deterministic_and_cycle_safe() {
             ("item-widget", 2),
             ("order-1042", 3),
         ]
+    );
+    assert_eq!(
+        impact[2].dependency_path(),
+        ["supplier-alpha", "facility-east", "item-widget", "order-1042"]
     );
 }
 
