@@ -187,6 +187,7 @@ impl SupplyEvent {
 pub struct ImpactRecord {
     node_key: String,
     hop_count: usize,
+    dependency_path: Vec<String>,
 }
 
 impl ImpactRecord {
@@ -200,6 +201,12 @@ impl ImpactRecord {
     #[must_use]
     pub const fn hop_count(&self) -> usize {
         self.hop_count
+    }
+
+    /// Returns the shortest admitted dependency path from source to this node, inclusive.
+    #[must_use]
+    pub fn dependency_path(&self) -> &[String] {
+        &self.dependency_path
     }
 }
 
@@ -281,6 +288,7 @@ impl SupplyGraph {
     ///
     /// The result intentionally makes no claim about severity, probability, timing, or
     /// recoverability. Records are ordered by shortest hop count and then semantic node key.
+    /// Each record carries the first deterministic shortest dependency path discovered.
     pub fn downstream_impacts(&self, event_key: &str) -> Result<Vec<ImpactRecord>, GraphError> {
         let event = self
             .events
@@ -288,21 +296,24 @@ impl SupplyGraph {
             .ok_or_else(|| GraphError::UnknownEvent(event_key.to_owned()))?;
         let source_node = event.affected_node().to_owned();
         let mut visited = BTreeSet::from([source_node.clone()]);
-        let mut queue = VecDeque::from([(source_node, 0_usize)]);
+        let mut queue = VecDeque::from([(source_node.clone(), vec![source_node])]);
         let mut impacts = Vec::new();
 
-        while let Some((node_key, hop_count)) = queue.pop_front() {
+        while let Some((node_key, dependency_path)) = queue.pop_front() {
             let Some(downstream_nodes) = self.dependencies.get(&node_key) else {
                 continue;
             };
             for downstream_node in downstream_nodes {
                 if visited.insert(downstream_node.clone()) {
-                    let downstream_hops = hop_count + 1;
+                    let mut downstream_path = dependency_path.clone();
+                    downstream_path.push(downstream_node.clone());
+                    let hop_count = downstream_path.len() - 1;
                     impacts.push(ImpactRecord {
                         node_key: downstream_node.clone(),
-                        hop_count: downstream_hops,
+                        hop_count,
+                        dependency_path: downstream_path.clone(),
                     });
-                    queue.push_back((downstream_node.clone(), downstream_hops));
+                    queue.push_back((downstream_node.clone(), downstream_path));
                 }
             }
         }

@@ -6,7 +6,7 @@ Rust 1.97.1 is pinned for the domain core. Core graph/scientific computation rem
 
 ## Domain API
 
-`SupplyGraph` admits typed supply nodes, directed dependencies, and evidence-backed `SupplyEvent` records. `downstream_impacts` performs breadth-first directed reachability, deduplicates visited nodes, and orders results by shortest dependency hops then semantic node key.
+`SupplyGraph` admits typed supply nodes, directed dependencies, and evidence-backed `SupplyEvent` records. `downstream_impacts` performs breadth-first directed reachability, deduplicates visited nodes, records the deterministic shortest dependency path, and orders results by shortest dependency hops then semantic node key.
 
 This is a **potential-impact** computation only. It must not be repurposed as severity, probability, lead-time, or recovery scoring.
 

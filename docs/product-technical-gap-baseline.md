@@ -4,13 +4,13 @@ Evidence base: repository main `11f3e0f191d7f5a30e1bb0512d26e0db323f38e2` was a 
 
 ## Feature specification now implemented
 
-Observed evidence-backed disruption → validate source/node invariants → traverse explicit downstream dependency edges → return unique potential impacts ordered by shortest hop count and semantic key. No heuristic score is produced.
+Observed evidence-backed disruption → validate source/node invariants → traverse explicit downstream dependency edges → return unique potential impacts ordered by shortest hop count and semantic key, each with a deterministic shortest dependency path. No heuristic score is produced.
 
 ```mermaid
 flowchart LR
   E[Evidence Registry] -->|observed event| I[Disruption Impact]
   N[Network Registry] -->|nodes + dependencies| I
-  I --> P[Potential Impact Result]
+  I --> P[Potential Impact + Dependency Path]
   P --> H[Human decision / next action]
 ```
 
@@ -19,7 +19,7 @@ flowchart LR
 | Gap | Owner | Evidence | Action | Current status | Next verification |
 | --- | --- | --- | --- | --- | --- |
 | Durable temporal network/evidence store | this repo | in-memory aggregate only | implement 3NF persistence with semantic keys, temporal validity, immutable evidence and item-level UPSERT/idempotency | open | concurrency + migration + recovery tests |
-| Path-level explanation | this repo | result currently contains node + hop count | return supporting dependency path/evidence without duplicating source truth | open | cycle/multi-path property tests |
+| Path-level explanation | this repo | `ImpactRecord.dependency_path` plus regression test | preserve deterministic shortest path and later attach per-edge evidence | implemented on writer branch | exact-head CI/review; multi-path property tests |
 | Real source ingestion | adapter boundary; causal source repos if reusable | no connector exists | add EPCIS/ERP/WMS/TMS ACL adapters using real non-synthetic contract fixtures | open | interoperability + malformed-input tests |
 | Authn/authz and tenant isolation | this repo + ecosystem identity boundary | no network API | define workspace ownership, authorization and audit before external access | open | security tests + threat model |
 | Operability | this repo | no service/container/release | add compose-compatible service only when API exists; health/metrics/backup/restore and resource tuning | open | failure-injection + restore evidence |
@@ -30,4 +30,4 @@ flowchart LR
 
 ## DDD state
 
-Core: Disruption Impact. Supporting: Network Registry, Evidence Registry. Generic: identity/audit/transport/observability. The current aggregate is `SupplyGraph`; entities/value objects are supply nodes, dependency facts, supply events and evidence references. Domain service behavior is deterministic downstream reachability. Invariants are documented in PRD/architecture and enforced by tests.
+Core: Disruption Impact. Supporting: Network Registry, Evidence Registry. Generic: identity/audit/transport/observability. The current aggregate is `SupplyGraph`; entities/value objects are supply nodes, dependency facts, supply events, evidence references and impact records. Domain service behavior is deterministic downstream reachability plus shortest-path explanation. Invariants are documented in PRD/architecture and enforced by tests.

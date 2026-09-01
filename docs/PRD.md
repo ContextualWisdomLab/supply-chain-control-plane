@@ -14,7 +14,8 @@ Given a customer-owned supply-network workspace and a newly observed disruption,
 2. Register explicit directed dependency facts.
 3. Admit a disruption event only with source evidence.
 4. Compute deterministic downstream reachability without heuristic weights.
-5. Present results as potential impact, never fabricated certainty.
+5. Return the deterministic shortest admitted dependency path for each potential impact.
+6. Present results as potential impact, never fabricated certainty.
 
 ## Personas
 
@@ -30,6 +31,7 @@ Given a customer-owned supply-network workspace and a newly observed disruption,
 - blank evidence identity/locator fails closed;
 - cycles terminate and do not re-report the source node;
 - impact output is deterministic by hop count and semantic key;
+- every impact result includes an auditable dependency path back to the directly affected node;
 - no probability, severity, recovery-time, or optimization claim is created without a validated model contract.
 
 ## Explicit non-goals for this slice
@@ -38,4 +40,4 @@ No production connector, persistence, authentication, recovery optimizer, synthe
 
 ## Commercial outcome sequence
 
-Evidence ingestion and durable 3NF storage → authenticated impact API → path-level explanation and audit → real connector interoperability (prefer EPCIS 2.0 where applicable) → scenario planning with validated constraints → operability/load/security evidence → versioned public release.
+Evidence ingestion and durable 3NF storage → authenticated impact API → evidence-linked path drill-through and audit → real connector interoperability (prefer EPCIS 2.0 where applicable) → scenario planning with validated constraints → operability/load/security evidence → versioned public release.
