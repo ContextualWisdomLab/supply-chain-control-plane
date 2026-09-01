@@ -310,6 +310,35 @@ fn admitted_values_are_trimmed_accessible_and_unknown_events_fail_closed() {
 }
 
 #[test]
+fn lookup_boundaries_normalize_keys_consistently_with_admission() {
+    let mut graph = SupplyGraph::new();
+    graph
+        .add_node(" shipment-lookup ", SupplyNodeKind::Shipment)
+        .unwrap();
+    graph
+        .record_event(
+            SupplyEvent::new(
+                " event-lookup ",
+                " shipment-lookup ",
+                SupplyEventKind::ShipmentDelayed,
+                "2026-09-01T12:46:00Z",
+                evidence(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        graph.node_kind(" shipment-lookup "),
+        Some(SupplyNodeKind::Shipment)
+    );
+    assert_eq!(
+        graph.downstream_impacts(" event-lookup ").unwrap(),
+        Vec::new()
+    );
+}
+
+#[test]
 fn graph_errors_have_stable_operator_facing_messages() {
     let errors = [
         (GraphError::BlankField("field_name"), "field_name must not be blank"),
