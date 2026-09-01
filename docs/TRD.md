@@ -2,7 +2,7 @@
 
 ## Runtime
 
-Rust 1.97.1 is pinned for the domain core. Core graph/scientific computation remains Rust. The current crate has no third-party runtime dependency.
+Rust 1.98.0 is pinned for the domain core. Core graph/scientific computation remains Rust. The current crate has no third-party runtime dependency.
 
 ## Domain API
 
@@ -20,4 +20,4 @@ ERP/WMS/TMS/EPCIS integrations enter through anti-corruption adapters. Source pa
 
 ## Verification
 
-PR heads must pass local Rust format/lint/test CI plus the ContextualWisdomLab central required workflows and independent review. Behavioral coverage includes cycles, duplicate/unknown references, equal-length routes, evidence alignment, accessors, and operator-facing error rendering. Quantitative coverage measurement, persistence concurrency tests, and realistic load tests become gates when those surfaces exist.
+PR heads must pass exact-head Rust format, compile, Clippy `-D warnings`, tests, doctests, and warning-free rustdoc. Stable CI enforces 100% line, function, and region coverage; a separately pinned nightly lane enforces a nonzero 100% branch denominator. ContextualWisdomLab central required workflows and independent review remain mandatory. Persistence concurrency tests and realistic load tests become gates when those surfaces exist.
