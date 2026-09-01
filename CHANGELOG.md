@@ -12,6 +12,8 @@ All notable changes to Supply Chain Control Plane are documented here.
 - Equal-length multi-route determinism, evidence-alignment, accessor, and operator-error regression coverage.
 - Product, technical, architecture, security, research, and commercialization baselines.
 - Pinned Rust toolchain and pull-request quality workflow.
+- Apache License 2.0 source grant with matching Cargo package metadata.
+- Product-first README with purpose, quickstart, product/integration boundary, maturity, documentation map, contribution guidance, and licensing.
 
 ### Changed
-- Publication licensing remains an explicit pre-release governance decision; package metadata does not claim an unapproved license.
+- Commercialization tracking now separates the resolved source-license decision from the still-open immutable release, SBOM, signing, and provenance work.
