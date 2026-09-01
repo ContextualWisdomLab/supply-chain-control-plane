@@ -230,11 +230,7 @@ fn item_level_upserts_are_idempotent_for_exact_replays_and_fail_on_conflicts() {
     );
     assert_eq!(
         graph
-            .upsert_dependency(
-                " supplier-alpha ",
-                " facility-east ",
-                edge_evidence.clone()
-            )
+            .upsert_dependency(" supplier-alpha ", " facility-east ", edge_evidence.clone())
             .unwrap(),
         UpsertOutcome::Unchanged
     );
@@ -262,10 +258,7 @@ fn item_level_upserts_are_idempotent_for_exact_replays_and_fail_on_conflicts() {
         graph.upsert_event(event.clone()).unwrap(),
         UpsertOutcome::Inserted
     );
-    assert_eq!(
-        graph.upsert_event(event).unwrap(),
-        UpsertOutcome::Unchanged
-    );
+    assert_eq!(graph.upsert_event(event).unwrap(), UpsertOutcome::Unchanged);
     let conflicting_event = SupplyEvent::new(
         "event-replay",
         "supplier-alpha",
