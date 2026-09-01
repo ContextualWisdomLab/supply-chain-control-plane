@@ -25,8 +25,15 @@ flowchart LR
 | Operability | this repo | no service/container/release | add compose-compatible service only when API exists; health/metrics/backup/restore and resource tuning | open | failure-injection + restore evidence |
 | Customer workflow / UX | this repo | no UI | design evidence drill-through and next-action workflow without exposing internal boundaries | open | accessibility/E2E/screenshots + realistic load |
 | Quantified severity/recovery scenarios | dedicated validated Rust model boundary | only reachability is justified | select/derive model from authoritative evidence; encode constraints and uncertainty, never rule-of-thumb weights | open | validation dataset + calibration/model tests |
-| Release/provenance/license | this repo + central workflows + product owner | no release and no explicit repository license decision exists on `main` | make an explicit licensing decision, then define public artifact, SBOM/provenance and changelog release gate | open | license file/package metadata + signed/versioned release evidence |
+| Source licensing | this repo + product owner | root `LICENSE` and Cargo metadata on writer branch declare Apache-2.0; protected `main` has not integrated them yet | preserve Apache-2.0 source grant and keep future inbound code/assets commercially compatible | implemented on writer branch | exact-head checks/review + protected integration |
+| Immutable release / SBOM / provenance | this repo + central workflows | no release or signed artifact exists | define public artifact, SBOM/provenance, checksums/attestation and changelog release gate without treating source licensing as release evidence | open | signed/versioned release evidence |
 | Quantitative coverage evidence | this repo | exact-head Product CI enforces 100% line, function, and region coverage on stable Rust plus a nonzero 100% branch denominator on pinned nightly Rust | preserve the version-pinned gates and fail on zero denominators | implemented on writer branch | exact-head central checks + independent review |
+
+## Licensing due diligence
+
+The repository was initialized in ContextualWisdomLab as an independent root commit and the foundation branch contains repository-authored Rust, tests, workflows, and documentation rather than imported/vendored source. The current crate has no third-party runtime dependencies. Under the organization commercial-use policy, the writer branch therefore grants the repository source under Apache License 2.0 and declares `license = "Apache-2.0"` in `Cargo.toml`.
+
+That source grant does not manufacture release, deployment, customer, certification, transfer, SBOM, provenance, or third-party-license evidence. Any future dependency, copied source, generated asset, model artifact, or external adapter must be re-evaluated for inbound provenance and commercial compatibility before incorporation.
 
 ## DDD state
 
