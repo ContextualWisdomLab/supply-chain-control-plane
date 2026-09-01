@@ -1,5 +1,7 @@
 # Supply Chain Control Plane
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ContextualWisdomLab/supply-chain-control-plane)
+
 **Evidence-first disruption impact analysis for auditable supply networks.**
 
 Supply Chain Control Plane turns supplier, facility, item, inventory, shipment, order, and production evidence into an explainable dependency view. Its first bounded product slice answers three questions without inventing unsupported risk scores:
