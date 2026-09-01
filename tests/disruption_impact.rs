@@ -8,8 +8,11 @@ fn evidence() -> EvidenceReference {
 }
 
 fn dependency_evidence(source_record_key: &str) -> EvidenceReference {
-    EvidenceReference::new(source_record_key, &format!("erp://dependency/{source_record_key}"))
-        .expect("fixture dependency evidence is valid")
+    EvidenceReference::new(
+        source_record_key,
+        &format!("erp://dependency/{source_record_key}"),
+    )
+    .expect("fixture dependency evidence is valid")
 }
 
 #[test]
@@ -54,34 +57,35 @@ fn disruption_reachability_is_directional_deterministic_cycle_safe_and_explainab
         .unwrap();
 
     graph
-        .record_event(SupplyEvent::new(
-            "event-supplier-stop-001",
-            "supplier-alpha",
-            SupplyEventKind::ProductionStopped,
-            "2026-09-01T12:30:00Z",
-            evidence(),
+        .record_event(
+            SupplyEvent::new(
+                "event-supplier-stop-001",
+                "supplier-alpha",
+                SupplyEventKind::ProductionStopped,
+                "2026-09-01T12:30:00Z",
+                evidence(),
+            )
+            .unwrap(),
         )
-        .unwrap())
         .unwrap();
 
-    let impact = graph
-        .downstream_impacts("event-supplier-stop-001")
-        .unwrap();
+    let impact = graph.downstream_impacts("event-supplier-stop-001").unwrap();
 
     assert_eq!(
         impact
             .iter()
             .map(|record| (record.node_key(), record.hop_count()))
             .collect::<Vec<_>>(),
-        vec![
-            ("facility-east", 1),
-            ("item-widget", 2),
-            ("order-1042", 3),
-        ]
+        vec![("facility-east", 1), ("item-widget", 2), ("order-1042", 3),]
     );
     assert_eq!(
         impact[2].dependency_path(),
-        ["supplier-alpha", "facility-east", "item-widget", "order-1042"]
+        [
+            "supplier-alpha",
+            "facility-east",
+            "item-widget",
+            "order-1042"
+        ]
     );
     assert_eq!(
         impact[2]
@@ -297,7 +301,10 @@ fn admitted_values_are_trimmed_accessible_and_unknown_events_fail_closed() {
     graph
         .add_node("inventory-9", SupplyNodeKind::InventoryPosition)
         .unwrap();
-    assert_eq!(graph.node_kind("shipment-9"), Some(SupplyNodeKind::Shipment));
+    assert_eq!(
+        graph.node_kind("shipment-9"),
+        Some(SupplyNodeKind::Shipment)
+    );
     assert_eq!(
         graph.node_kind("inventory-9"),
         Some(SupplyNodeKind::InventoryPosition)
@@ -341,7 +348,10 @@ fn lookup_boundaries_normalize_keys_consistently_with_admission() {
 #[test]
 fn graph_errors_have_stable_operator_facing_messages() {
     let errors = [
-        (GraphError::BlankField("field_name"), "field_name must not be blank"),
+        (
+            GraphError::BlankField("field_name"),
+            "field_name must not be blank",
+        ),
         (
             GraphError::DuplicateNode("node-a".into()),
             "node already exists: node-a",
@@ -357,7 +367,10 @@ fn graph_errors_have_stable_operator_facing_messages() {
             },
             "dependency already exists: node-a -> node-b",
         ),
-        (GraphError::UnknownNode("node-a".into()), "unknown node: node-a"),
+        (
+            GraphError::UnknownNode("node-a".into()),
+            "unknown node: node-a",
+        ),
         (
             GraphError::UnknownEvent("event-a".into()),
             "unknown event: event-a",
