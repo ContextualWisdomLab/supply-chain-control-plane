@@ -3,7 +3,6 @@ name = "supply-chain-control-plane"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97.1"
-license = "Apache-2.0"
 description = "Evidence-first supply-chain disruption impact core"
 
 [lib]

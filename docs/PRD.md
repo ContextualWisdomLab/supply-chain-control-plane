@@ -6,7 +6,7 @@ Operations, procurement, and supply-risk teams hold dependency facts across ERP,
 
 ## Product job
 
-Given a customer-owned supply-network workspace and a newly observed disruption, surface the set of potentially affected downstream objects, the dependency path basis, and the source evidence for the observation and each dependency fact so a human can decide the next action.
+Given a customer-owned supply-network workspace and a newly observed disruption, surface the set of potentially affected downstream objects, the dependency path basis, and the source evidence for the originating observation and each dependency fact so a human can decide the next action.
 
 ## First commercial vertical
 
@@ -14,7 +14,7 @@ Given a customer-owned supply-network workspace and a newly observed disruption,
 2. Register explicit directed dependency facts only with source evidence.
 3. Admit a disruption event only with source evidence.
 4. Compute deterministic downstream reachability without heuristic weights.
-5. Return the deterministic shortest admitted dependency path and evidence for every edge.
+5. Return the deterministic shortest admitted dependency path, originating event evidence, and evidence for every dependency edge.
 6. Present results as potential impact, never fabricated certainty.
 
 ## Personas
@@ -32,7 +32,8 @@ Given a customer-owned supply-network workspace and a newly observed disruption,
 - dependency facts cannot be admitted without a validated `EvidenceReference`;
 - cycles terminate and do not re-report the source node;
 - impact output is deterministic by hop count and semantic key;
-- every impact result includes an auditable dependency path and edge evidence back to the directly affected node;
+- equal-length routes resolve deterministically rather than by insertion order;
+- every impact result includes the originating event evidence plus an auditable dependency path and edge evidence back to the directly affected node;
 - no probability, severity, recovery-time, or optimization claim is created without a validated model contract.
 
 ## Explicit non-goals for this slice
@@ -41,4 +42,4 @@ No production connector, persistence, authentication, recovery optimizer, synthe
 
 ## Commercial outcome sequence
 
-Evidence ingestion and durable 3NF storage → authenticated impact API → evidence-linked path drill-through and audit → real connector interoperability (prefer EPCIS 2.0 where applicable) → scenario planning with validated constraints → operability/load/security evidence → versioned public release.
+Evidence ingestion and durable 3NF storage → authenticated impact API → evidence-linked path drill-through and audit → real connector interoperability (prefer EPCIS 2.0 where applicable) → scenario planning with validated constraints → operability/load/security evidence → explicit publication license/provenance → versioned public release.
