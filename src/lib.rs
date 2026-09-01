@@ -244,7 +244,11 @@ impl SupplyGraph {
     }
 
     /// Adds a uniquely keyed supply node.
-    pub fn add_node(&mut self, node_key: &str, node_kind: SupplyNodeKind) -> Result<(), GraphError> {
+    pub fn add_node(
+        &mut self,
+        node_key: &str,
+        node_kind: SupplyNodeKind,
+    ) -> Result<(), GraphError> {
         let node_key = required_text(node_key, "supply_node_key")?;
         if self.nodes.contains_key(&node_key) {
             return Err(GraphError::DuplicateNode(node_key));
