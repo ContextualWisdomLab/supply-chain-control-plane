@@ -7,6 +7,11 @@ fn evidence() -> EvidenceReference {
         .expect("fixture evidence is valid")
 }
 
+fn dependency_evidence(source_record_key: &str) -> EvidenceReference {
+    EvidenceReference::new(source_record_key, &format!("erp://dependency/{source_record_key}"))
+        .expect("fixture dependency evidence is valid")
+}
+
 #[test]
 fn disruption_reachability_is_directional_deterministic_cycle_safe_and_explainable() {
     let mut graph = SupplyGraph::new();
@@ -20,14 +25,32 @@ fn disruption_reachability_is_directional_deterministic_cycle_safe_and_explainab
     graph.add_node("order-1042", SupplyNodeKind::Order).unwrap();
 
     graph
-        .add_dependency("supplier-alpha", "facility-east")
+        .add_dependency(
+            "supplier-alpha",
+            "facility-east",
+            dependency_evidence("edge-supplier-facility"),
+        )
         .unwrap();
     graph
-        .add_dependency("facility-east", "item-widget")
+        .add_dependency(
+            "facility-east",
+            "item-widget",
+            dependency_evidence("edge-facility-item"),
+        )
         .unwrap();
-    graph.add_dependency("item-widget", "order-1042").unwrap();
     graph
-        .add_dependency("order-1042", "facility-east")
+        .add_dependency(
+            "item-widget",
+            "order-1042",
+            dependency_evidence("edge-item-order"),
+        )
+        .unwrap();
+    graph
+        .add_dependency(
+            "order-1042",
+            "facility-east",
+            dependency_evidence("edge-order-facility-cycle"),
+        )
         .unwrap();
 
     graph
@@ -60,6 +83,18 @@ fn disruption_reachability_is_directional_deterministic_cycle_safe_and_explainab
         impact[2].dependency_path(),
         ["supplier-alpha", "facility-east", "item-widget", "order-1042"]
     );
+    assert_eq!(
+        impact[2]
+            .dependency_evidence()
+            .iter()
+            .map(EvidenceReference::source_record_key)
+            .collect::<Vec<_>>(),
+        vec![
+            "edge-supplier-facility",
+            "edge-facility-item",
+            "edge-item-order",
+        ]
+    );
 }
 
 #[test]
@@ -74,11 +109,19 @@ fn graph_rejects_unproven_or_structurally_invalid_state() {
         Err(GraphError::DuplicateNode("supplier-alpha".into()))
     );
     assert_eq!(
-        graph.add_dependency("supplier-alpha", "missing-node"),
+        graph.add_dependency(
+            "supplier-alpha",
+            "missing-node",
+            dependency_evidence("edge-missing"),
+        ),
         Err(GraphError::UnknownNode("missing-node".into()))
     );
     assert_eq!(
-        graph.add_dependency("supplier-alpha", "supplier-alpha"),
+        graph.add_dependency(
+            "supplier-alpha",
+            "supplier-alpha",
+            dependency_evidence("edge-self"),
+        ),
         Err(GraphError::SelfDependency("supplier-alpha".into()))
     );
 
@@ -102,10 +145,18 @@ fn duplicate_edges_and_events_are_not_silently_overwritten() {
     graph.add_node("supplier-alpha", SupplyNodeKind::Supplier).unwrap();
     graph.add_node("facility-east", SupplyNodeKind::Facility).unwrap();
     graph
-        .add_dependency("supplier-alpha", "facility-east")
+        .add_dependency(
+            "supplier-alpha",
+            "facility-east",
+            dependency_evidence("edge-original"),
+        )
         .unwrap();
     assert_eq!(
-        graph.add_dependency("supplier-alpha", "facility-east"),
+        graph.add_dependency(
+            "supplier-alpha",
+            "facility-east",
+            dependency_evidence("edge-replacement"),
+        ),
         Err(GraphError::DuplicateDependency {
             upstream_node: "supplier-alpha".into(),
             downstream_node: "facility-east".into(),
