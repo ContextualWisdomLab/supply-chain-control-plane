@@ -68,10 +68,16 @@ impl Display for GraphError {
                 "dependency already exists: {upstream_node} -> {downstream_node}"
             ),
             Self::ConflictingNode(key) => {
-                write!(formatter, "node replay conflicts with existing value: {key}")
+                write!(
+                    formatter,
+                    "node replay conflicts with existing value: {key}"
+                )
             }
             Self::ConflictingEvent(key) => {
-                write!(formatter, "event replay conflicts with existing value: {key}")
+                write!(
+                    formatter,
+                    "event replay conflicts with existing value: {key}"
+                )
             }
             Self::ConflictingDependency {
                 upstream_node,
@@ -128,10 +134,23 @@ pub enum SupplyEventKind {
 }
 
 /// Immutable evidence pointer for an observed event or dependency fact.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Debug output intentionally redacts the locator because source locators may carry
+/// credentials, signed query parameters, internal routing details, or customer data.
+#[derive(Clone, PartialEq, Eq)]
 pub struct EvidenceReference {
     source_record_key: String,
     source_locator: String,
+}
+
+impl std::fmt::Debug for EvidenceReference {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("EvidenceReference")
+            .field("source_record_key", &self.source_record_key)
+            .field("source_locator", &"<redacted>")
+            .finish()
+    }
 }
 
 impl EvidenceReference {
@@ -372,7 +391,9 @@ impl SupplyGraph {
 
         let downstream_by_key = self.dependencies.entry(upstream_node.clone()).or_default();
         match downstream_by_key.get(&downstream_node) {
-            Some(existing_evidence) if existing_evidence == &evidence => Ok(UpsertOutcome::Unchanged),
+            Some(existing_evidence) if existing_evidence == &evidence => {
+                Ok(UpsertOutcome::Unchanged)
+            }
             Some(_) => Err(GraphError::ConflictingDependency {
                 upstream_node,
                 downstream_node,
