@@ -94,7 +94,7 @@ pub enum SupplyEventKind {
     OrderAtRisk,
 }
 
-/// Immutable evidence pointer for an observed event.
+/// Immutable evidence pointer for an observed event or dependency fact.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EvidenceReference {
     source_record_key: String,
@@ -188,6 +188,7 @@ pub struct ImpactRecord {
     node_key: String,
     hop_count: usize,
     dependency_path: Vec<String>,
+    dependency_evidence: Vec<EvidenceReference>,
 }
 
 impl ImpactRecord {
@@ -208,13 +209,19 @@ impl ImpactRecord {
     pub fn dependency_path(&self) -> &[String] {
         &self.dependency_path
     }
+
+    /// Returns one evidence reference for every edge in the dependency path.
+    #[must_use]
+    pub fn dependency_evidence(&self) -> &[EvidenceReference] {
+        &self.dependency_evidence
+    }
 }
 
 /// In-memory aggregate for evidence-backed disruption reachability.
 #[derive(Clone, Debug, Default)]
 pub struct SupplyGraph {
     nodes: BTreeMap<String, SupplyNodeKind>,
-    dependencies: BTreeMap<String, BTreeSet<String>>,
+    dependencies: BTreeMap<String, BTreeMap<String, EvidenceReference>>,
     events: BTreeMap<String, SupplyEvent>,
 }
 
@@ -245,11 +252,12 @@ impl SupplyGraph {
         self.nodes.get(node_key).copied()
     }
 
-    /// Adds a directed dependency where `downstream_node` depends on `upstream_node`.
+    /// Adds an evidence-backed dependency where `downstream_node` depends on `upstream_node`.
     pub fn add_dependency(
         &mut self,
         upstream_node: &str,
         downstream_node: &str,
+        evidence: EvidenceReference,
     ) -> Result<(), GraphError> {
         let upstream_node = required_text(upstream_node, "upstream_supply_node_key")?;
         let downstream_node = required_text(downstream_node, "downstream_supply_node_key")?;
@@ -262,13 +270,15 @@ impl SupplyGraph {
         if !self.nodes.contains_key(&downstream_node) {
             return Err(GraphError::UnknownNode(downstream_node));
         }
-        let downstream = self.dependencies.entry(upstream_node.clone()).or_default();
-        if !downstream.insert(downstream_node.clone()) {
+
+        let downstream_by_key = self.dependencies.entry(upstream_node.clone()).or_default();
+        if downstream_by_key.contains_key(&downstream_node) {
             return Err(GraphError::DuplicateDependency {
                 upstream_node,
                 downstream_node,
             });
         }
+        downstream_by_key.insert(downstream_node, evidence);
         Ok(())
     }
 
@@ -288,7 +298,7 @@ impl SupplyGraph {
     ///
     /// The result intentionally makes no claim about severity, probability, timing, or
     /// recoverability. Records are ordered by shortest hop count and then semantic node key.
-    /// Each record carries the first deterministic shortest dependency path discovered.
+    /// Each record carries the first deterministic shortest dependency path and its edge evidence.
     pub fn downstream_impacts(&self, event_key: &str) -> Result<Vec<ImpactRecord>, GraphError> {
         let event = self
             .events
@@ -296,24 +306,35 @@ impl SupplyGraph {
             .ok_or_else(|| GraphError::UnknownEvent(event_key.to_owned()))?;
         let source_node = event.affected_node().to_owned();
         let mut visited = BTreeSet::from([source_node.clone()]);
-        let mut queue = VecDeque::from([(source_node.clone(), vec![source_node])]);
+        let mut queue = VecDeque::from([(
+            source_node.clone(),
+            vec![source_node],
+            Vec::<EvidenceReference>::new(),
+        )]);
         let mut impacts = Vec::new();
 
-        while let Some((node_key, dependency_path)) = queue.pop_front() {
+        while let Some((node_key, dependency_path, evidence_path)) = queue.pop_front() {
             let Some(downstream_nodes) = self.dependencies.get(&node_key) else {
                 continue;
             };
-            for downstream_node in downstream_nodes {
+            for (downstream_node, edge_evidence) in downstream_nodes {
                 if visited.insert(downstream_node.clone()) {
                     let mut downstream_path = dependency_path.clone();
                     downstream_path.push(downstream_node.clone());
+                    let mut downstream_evidence = evidence_path.clone();
+                    downstream_evidence.push(edge_evidence.clone());
                     let hop_count = downstream_path.len() - 1;
                     impacts.push(ImpactRecord {
                         node_key: downstream_node.clone(),
                         hop_count,
                         dependency_path: downstream_path.clone(),
+                        dependency_evidence: downstream_evidence.clone(),
                     });
-                    queue.push_back((downstream_node.clone(), downstream_path));
+                    queue.push_back((
+                        downstream_node.clone(),
+                        downstream_path,
+                        downstream_evidence,
+                    ));
                 }
             }
         }
