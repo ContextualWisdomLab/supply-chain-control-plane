@@ -253,10 +253,10 @@ impl SupplyGraph {
         Ok(())
     }
 
-    /// Returns the registered kind for a supply node.
+    /// Returns the registered kind for a supply node after normalizing surrounding whitespace.
     #[must_use]
     pub fn node_kind(&self, node_key: &str) -> Option<SupplyNodeKind> {
-        self.nodes.get(node_key).copied()
+        self.nodes.get(node_key.trim()).copied()
     }
 
     /// Adds an evidence-backed dependency where `downstream_node` depends on `upstream_node`.
@@ -308,10 +308,11 @@ impl SupplyGraph {
     /// Each record carries the first deterministic shortest dependency path, its edge evidence,
     /// and the source evidence for the disruption event.
     pub fn downstream_impacts(&self, event_key: &str) -> Result<Vec<ImpactRecord>, GraphError> {
+        let normalized_event_key = event_key.trim();
         let event = self
             .events
-            .get(event_key)
-            .ok_or_else(|| GraphError::UnknownEvent(event_key.to_owned()))?;
+            .get(normalized_event_key)
+            .ok_or_else(|| GraphError::UnknownEvent(normalized_event_key.to_owned()))?;
         let source_node = event.affected_node().to_owned();
         let mut visited = BTreeSet::from([source_node.clone()]);
         let mut queue = VecDeque::from([(
