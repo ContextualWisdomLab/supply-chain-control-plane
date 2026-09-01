@@ -12,6 +12,7 @@ All notable changes to Supply Chain Control Plane are documented here.
 - Equal-length multi-route determinism, evidence-alignment, accessor, and operator-error regression coverage.
 - Replay-safe item upserts for supply nodes, dependency facts, and disruption events with explicit inserted/unchanged outcomes and conflict-on-change semantics.
 - Regression coverage for exact retries, immutable-evidence conflicts, node-kind conflicts, event-content conflicts, and upsert invariant failures.
+- Explicit blank upstream/downstream dependency-key regression coverage, closing the stable LLVM line, function, and region denominators at 100%.
 - Test-first evidence-locator debug redaction so routine `Debug` output retains the semantic source-record key while never emitting the potentially sensitive locator.
 - Product, technical, architecture, security, research, and commercialization baselines.
 - Pinned Rust toolchain and pull-request quality workflow.
@@ -23,3 +24,4 @@ All notable changes to Supply Chain Control Plane are documented here.
 - Future persistence is now required to preserve the tested item-level replay/no-op/conflict contract rather than relying on last-write-wins behavior.
 - Commercialization tracking now separates the implemented domain idempotency contract from still-open durable temporal persistence, concurrency, migration, and recovery evidence.
 - Commercialization tracking continues to separate the resolved source-license decision from the still-open immutable release, SBOM, signing, and provenance work.
+- Generated Rust build and coverage artifacts are excluded from version control; the accidentally staged `target/` tree was removed before review completion.
