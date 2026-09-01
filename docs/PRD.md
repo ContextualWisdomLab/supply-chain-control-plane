@@ -13,9 +13,10 @@ Given a customer-owned supply-network workspace and a newly observed disruption,
 1. Register semantically identified supply nodes.
 2. Register explicit directed dependency facts only with source evidence.
 3. Admit a disruption event only with source evidence.
-4. Compute deterministic downstream reachability without heuristic weights.
-5. Return the deterministic shortest admitted dependency path, originating event evidence, and evidence for every dependency edge.
-6. Present results as potential impact, never fabricated certainty.
+4. Accept exact node/dependency/event ingestion replays idempotently while rejecting same-key semantic conflicts.
+5. Compute deterministic downstream reachability without heuristic weights.
+6. Return the deterministic shortest admitted dependency path, originating event evidence, and evidence for every dependency edge.
+7. Present results as potential impact, never fabricated certainty.
 
 ## Personas
 
@@ -25,8 +26,10 @@ Given a customer-owned supply-network workspace and a newly observed disruption,
 
 ## Acceptance criteria for this slice
 
-- duplicate nodes, edges, and events fail closed;
-- missing referenced nodes fail closed;
+- strict add commands reject duplicate nodes, edges, and events rather than silently overwriting them;
+- replay-oriented upsert commands return `Inserted` for a new item and `Unchanged` only for an exact semantic replay;
+- an upsert that reuses a node, dependency, or event identity with different immutable content fails closed as a conflict;
+- missing referenced nodes fail closed for both strict-add and upsert commands;
 - direct self-dependencies fail closed;
 - blank evidence identity/locator fails closed;
 - dependency facts cannot be admitted without a validated `EvidenceReference`;
@@ -38,7 +41,7 @@ Given a customer-owned supply-network workspace and a newly observed disruption,
 
 ## Explicit non-goals for this slice
 
-No production connector, persistence, authentication, recovery optimizer, synthetic production data, or customer-facing UI is claimed complete.
+No production connector, durable persistence, authentication, recovery optimizer, synthetic production data, or customer-facing UI is claimed complete. The in-memory upsert contract specifies replay semantics for future command handlers; it is not evidence of database durability or concurrency safety.
 
 ## Commercial outcome sequence
 
