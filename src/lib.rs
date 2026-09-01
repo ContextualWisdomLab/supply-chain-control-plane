@@ -189,6 +189,7 @@ pub struct ImpactRecord {
     hop_count: usize,
     dependency_path: Vec<String>,
     dependency_evidence: Vec<EvidenceReference>,
+    event_evidence: EvidenceReference,
 }
 
 impl ImpactRecord {
@@ -214,6 +215,12 @@ impl ImpactRecord {
     #[must_use]
     pub fn dependency_evidence(&self) -> &[EvidenceReference] {
         &self.dependency_evidence
+    }
+
+    /// Returns the evidence reference for the disruption event that produced this impact.
+    #[must_use]
+    pub const fn event_evidence(&self) -> &EvidenceReference {
+        &self.event_evidence
     }
 }
 
@@ -298,7 +305,8 @@ impl SupplyGraph {
     ///
     /// The result intentionally makes no claim about severity, probability, timing, or
     /// recoverability. Records are ordered by shortest hop count and then semantic node key.
-    /// Each record carries the first deterministic shortest dependency path and its edge evidence.
+    /// Each record carries the first deterministic shortest dependency path, its edge evidence,
+    /// and the source evidence for the disruption event.
     pub fn downstream_impacts(&self, event_key: &str) -> Result<Vec<ImpactRecord>, GraphError> {
         let event = self
             .events
@@ -329,6 +337,7 @@ impl SupplyGraph {
                         hop_count,
                         dependency_path: downstream_path.clone(),
                         dependency_evidence: downstream_evidence.clone(),
+                        event_evidence: event.evidence().clone(),
                     });
                     queue.push_back((
                         downstream_node.clone(),
