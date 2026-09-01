@@ -20,8 +20,10 @@ This repository establishes an evidence-preserving control-plane core where ever
 | --- | --- |
 | Explainable disruption scope | Deterministic downstream reachability over explicit dependency facts |
 | Evidence drill-through | Originating event evidence plus one evidence reference per path edge |
+| Replay-safe ingestion boundary | Item upserts insert missing facts, no-op on exact replays, and reject same-key changed immutable content |
+| Secret-safe diagnostics | Evidence locators stay available to authorized drill-through code but are redacted from default Rust `Debug` output |
 | Stable results | Semantic ordering and deterministic shortest-path selection, including equal-length alternatives |
-| Fail-closed graph admission | Blank, duplicate, unknown-reference, and direct self-dependency rejection |
+| Fail-closed graph admission | Blank, duplicate, unknown-reference, direct self-dependency, and replay-conflict rejection |
 | Cycle safety | Traversal terminates without re-reporting the disrupted source |
 | Commercially usable source | Apache License 2.0 source grant; third-party terms remain separate |
 
@@ -73,9 +75,11 @@ The current aggregate is `SupplyGraph`.
 - **Supply nodes** represent disruption-relevant supplier, facility, item, inventory-position, shipment, and order identities.
 - **Dependency facts** are directed and evidence-backed: a downstream node depends on an upstream node.
 - **Supply events** identify an observed disruption at one node and retain an immutable evidence reference.
+- **Replay-oriented upserts** insert an absent node/dependency/event, no-op only for an exact semantic replay, and fail closed when an existing identity is paired with changed immutable content.
 - **Impact records** carry the potentially affected node, hop count, deterministic dependency path, event evidence, and edge-aligned dependency evidence.
+- **Evidence references** retain their full locator for explicit drill-through while default `Debug` output replaces the locator with `<redacted>` so ordinary diagnostics do not disclose token-bearing or customer-sensitive source locations.
 
-Admission fails closed for malformed semantic identity, unknown references, duplicate facts/events/nodes, and direct self-dependencies. The path contract remains deterministic even when multiple shortest routes have equal length.
+Admission fails closed for malformed semantic identity, unknown references, duplicate facts/events/nodes, direct self-dependencies, and replay conflicts. The path contract remains deterministic even when multiple shortest routes have equal length.
 
 ## What is implemented now
 
@@ -84,6 +88,8 @@ The current writer branch contains the first commercial foundation slice:
 - Rust-first, dependency-free domain core;
 - evidence-backed disruption events;
 - evidence-backed directed dependency facts;
+- replay-safe item upserts with explicit inserted/unchanged/conflict semantics;
+- evidence-locator debug redaction with a regression test covering token-bearing locators;
 - deterministic cycle-safe downstream reachability;
 - shortest-path explanation with edge-by-edge evidence;
 - originating disruption evidence retained on every impact result;
