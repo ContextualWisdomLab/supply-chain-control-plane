@@ -10,6 +10,15 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+/// Result of an item-level idempotent upsert command.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpsertOutcome {
+    /// The semantic item did not exist and was inserted.
+    Inserted,
+    /// An identical semantic item already existed, so no state changed.
+    Unchanged,
+}
+
 /// Failures that protect graph and evidence invariants.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GraphError {
@@ -21,6 +30,17 @@ pub enum GraphError {
     DuplicateEvent(String),
     /// A dependency edge is already present.
     DuplicateDependency {
+        /// Upstream node key.
+        upstream_node: String,
+        /// Downstream node key.
+        downstream_node: String,
+    },
+    /// A node replay reused a semantic key with a different value.
+    ConflictingNode(String),
+    /// An event replay reused a semantic key with different immutable content.
+    ConflictingEvent(String),
+    /// A dependency replay reused the edge identity with different immutable evidence.
+    ConflictingDependency {
         /// Upstream node key.
         upstream_node: String,
         /// Downstream node key.
@@ -46,6 +66,19 @@ impl Display for GraphError {
             } => write!(
                 formatter,
                 "dependency already exists: {upstream_node} -> {downstream_node}"
+            ),
+            Self::ConflictingNode(key) => {
+                write!(formatter, "node replay conflicts with existing value: {key}")
+            }
+            Self::ConflictingEvent(key) => {
+                write!(formatter, "event replay conflicts with existing value: {key}")
+            }
+            Self::ConflictingDependency {
+                upstream_node,
+                downstream_node,
+            } => write!(
+                formatter,
+                "dependency replay conflicts with existing value: {upstream_node} -> {downstream_node}"
             ),
             Self::UnknownNode(key) => write!(formatter, "unknown node: {key}"),
             Self::UnknownEvent(key) => write!(formatter, "unknown event: {key}"),
@@ -257,6 +290,27 @@ impl SupplyGraph {
         Ok(())
     }
 
+    /// Idempotently inserts a supply node and rejects same-key semantic conflicts.
+    ///
+    /// This command is intended for replayable ingestion boundaries. An exact replay returns
+    /// [`UpsertOutcome::Unchanged`]; reusing a semantic key for a different node kind fails
+    /// closed instead of mutating the admitted fact.
+    pub fn upsert_node(
+        &mut self,
+        node_key: &str,
+        node_kind: SupplyNodeKind,
+    ) -> Result<UpsertOutcome, GraphError> {
+        let node_key = required_text(node_key, "supply_node_key")?;
+        match self.nodes.get(&node_key) {
+            Some(existing_kind) if *existing_kind == node_kind => Ok(UpsertOutcome::Unchanged),
+            Some(_) => Err(GraphError::ConflictingNode(node_key)),
+            None => {
+                self.nodes.insert(node_key, node_kind);
+                Ok(UpsertOutcome::Inserted)
+            }
+        }
+    }
+
     /// Returns the registered kind for a supply node after normalizing surrounding whitespace.
     #[must_use]
     pub fn node_kind(&self, node_key: &str) -> Option<SupplyNodeKind> {
@@ -293,6 +347,43 @@ impl SupplyGraph {
         Ok(())
     }
 
+    /// Idempotently inserts an evidence-backed dependency without rewriting admitted evidence.
+    ///
+    /// Exact replay of the same edge and evidence is a no-op. Reusing the edge identity with a
+    /// different evidence reference fails closed so ingestion retries cannot silently rewrite
+    /// provenance.
+    pub fn upsert_dependency(
+        &mut self,
+        upstream_node: &str,
+        downstream_node: &str,
+        evidence: EvidenceReference,
+    ) -> Result<UpsertOutcome, GraphError> {
+        let upstream_node = required_text(upstream_node, "upstream_supply_node_key")?;
+        let downstream_node = required_text(downstream_node, "downstream_supply_node_key")?;
+        if upstream_node == downstream_node {
+            return Err(GraphError::SelfDependency(upstream_node));
+        }
+        if !self.nodes.contains_key(&upstream_node) {
+            return Err(GraphError::UnknownNode(upstream_node));
+        }
+        if !self.nodes.contains_key(&downstream_node) {
+            return Err(GraphError::UnknownNode(downstream_node));
+        }
+
+        let downstream_by_key = self.dependencies.entry(upstream_node.clone()).or_default();
+        match downstream_by_key.get(&downstream_node) {
+            Some(existing_evidence) if existing_evidence == &evidence => Ok(UpsertOutcome::Unchanged),
+            Some(_) => Err(GraphError::ConflictingDependency {
+                upstream_node,
+                downstream_node,
+            }),
+            None => {
+                downstream_by_key.insert(downstream_node, evidence);
+                Ok(UpsertOutcome::Inserted)
+            }
+        }
+    }
+
     /// Records an evidence-backed event without silently overwriting a prior event key.
     pub fn record_event(&mut self, event: SupplyEvent) -> Result<(), GraphError> {
         if !self.nodes.contains_key(event.affected_node()) {
@@ -303,6 +394,24 @@ impl SupplyGraph {
         }
         self.events.insert(event.event_key().to_owned(), event);
         Ok(())
+    }
+
+    /// Idempotently inserts an event while keeping an admitted event immutable by semantic key.
+    ///
+    /// An exact event replay is a no-op. Any changed affected node, event kind, observation time,
+    /// or evidence for an existing event key is a conflict rather than an overwrite.
+    pub fn upsert_event(&mut self, event: SupplyEvent) -> Result<UpsertOutcome, GraphError> {
+        if !self.nodes.contains_key(event.affected_node()) {
+            return Err(GraphError::UnknownNode(event.affected_node().to_owned()));
+        }
+        match self.events.get(event.event_key()) {
+            Some(existing_event) if existing_event == &event => Ok(UpsertOutcome::Unchanged),
+            Some(_) => Err(GraphError::ConflictingEvent(event.event_key().to_owned())),
+            None => {
+                self.events.insert(event.event_key().to_owned(), event);
+                Ok(UpsertOutcome::Inserted)
+            }
+        }
     }
 
     /// Computes unique potentially impacted nodes by directed dependency reachability.
