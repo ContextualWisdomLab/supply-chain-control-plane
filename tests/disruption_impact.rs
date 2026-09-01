@@ -294,6 +294,22 @@ fn upsert_validation_preserves_graph_invariants() {
     );
     assert_eq!(
         graph.upsert_dependency(
+            " ",
+            "supplier-alpha",
+            dependency_evidence("edge-blank-upstream"),
+        ),
+        Err(GraphError::BlankField("upstream_supply_node_key"))
+    );
+    assert_eq!(
+        graph.upsert_dependency(
+            "supplier-alpha",
+            " ",
+            dependency_evidence("edge-blank-downstream"),
+        ),
+        Err(GraphError::BlankField("downstream_supply_node_key"))
+    );
+    assert_eq!(
+        graph.upsert_dependency(
             "supplier-alpha",
             "supplier-alpha",
             dependency_evidence("edge-self-upsert"),
