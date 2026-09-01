@@ -1,0 +1,32 @@
+name: Coverage region diagnostic
+
+on:
+  push:
+    branches: [feat/disruption-impact-foundation]
+    paths: [.github/coverage-region-diagnostic.trigger]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5
+        with:
+          tool: cargo-llvm-cov@0.9.0
+          checksum: true
+      - name: Export exact-head coverage regions
+        run: |
+          set -euo pipefail
+          cargo llvm-cov clean
+          cargo llvm-cov --all-features --all-targets --locked --json --output-path coverage.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: coverage-region-diagnostic-${{ github.sha }}
+          path: coverage.json
+          if-no-files-found: error
+          retention-days: 1
