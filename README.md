@@ -1,19 +1,19 @@
 # Supply Chain Control Plane
 
-Supply Chain Control Plane turns scattered supplier, facility, item, inventory, shipment, order, and production evidence into a time-aware dependency view that helps an operations team answer: **what can this disruption affect next, which dependency path connects it, and what evidence supports the observation?**
+Supply Chain Control Plane turns scattered supplier, facility, item, inventory, shipment, order, and production evidence into a time-aware dependency view that helps an operations team answer: **what can this disruption affect next, which dependency path connects it, and what evidence supports every step?**
 
-The first commercial vertical is intentionally narrow: register supply-network dependencies, record an evidence-backed disruption event, and return deterministic downstream reachability with the shortest admitted dependency path. It does **not** invent probability, severity, recovery time, or optimization weights. Those claims require separately validated models and data.
+The first commercial vertical is intentionally narrow: register evidence-backed supply-network dependencies, record an evidence-backed disruption event, and return deterministic downstream reachability with the shortest admitted dependency path plus evidence for each edge. It does **not** invent probability, severity, recovery time, or optimization weights. Those claims require separately validated models and data.
 
 ## Current slice
 
 The Rust domain core provides:
 
 - supply nodes with explicit kinds;
-- directed dependency edges (`downstream` depends on `upstream`);
+- evidence-backed directed dependency edges (`downstream` depends on `upstream`);
 - immutable evidence references on observed events;
 - duplicate/self/unknown-reference guards;
 - deterministic, cycle-safe downstream impact reachability;
-- path-level explanation from the disrupted source to each potentially impacted node.
+- path-level explanation and edge-by-edge evidence from the disrupted source to each potentially impacted node.
 
 ```bash
 cargo test --all-targets --all-features
