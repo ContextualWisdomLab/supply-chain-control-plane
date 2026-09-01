@@ -4,24 +4,124 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: product-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   rust-quality:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Stable Rust quality and coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - name: Checkout exact revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
       - name: Show pinned toolchain
-        run: rustc --version --verbose
+        run: |
+          rustc --version --verbose
+          cargo --version
+
+      - name: Install pinned coverage tool
+        uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5 # v2.82.0
+        with:
+          tool: cargo-llvm-cov@0.9.0
+
+      - name: Verify locked package metadata
+        run: cargo metadata --locked --format-version 1 --no-deps
+
       - name: Format
         run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test --all-targets --all-features
+
+      - name: Compile all targets
+        run: cargo check --all-targets --all-features --locked
+
+      - name: Reject Clippy warnings
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
+      - name: Test all targets
+        run: cargo test --all-targets --all-features --locked
+
+      - name: Run documentation tests
+        run: cargo test --doc --all-features --locked
+
+      - name: Build warning-free public documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --all-features --no-deps --locked
+
+      - name: Enforce 100 percent line, function, and region coverage
+        run: |
+          cargo llvm-cov clean
+          cargo llvm-cov \
+            --all-features \
+            --all-targets \
+            --locked \
+            --fail-under-lines 100 \
+            --fail-under-functions 100 \
+            --fail-under-regions 100 \
+            --show-missing-lines
+
+  rust-branch-coverage:
+    name: Nightly Rust branch coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned nightly coverage compiler
+        run: |
+          rustup toolchain install nightly-2026-08-20 \
+            --profile minimal \
+            --component llvm-tools-preview
+          rustc +nightly-2026-08-20 --version --verbose
+
+      - name: Install pinned coverage tool
+        uses: taiki-e/install-action@b8cecb83565409bcc297b2df6e77f030b2a468d5 # v2.82.0
+        with:
+          tool: cargo-llvm-cov@0.9.0
+
+      - name: Measure branch coverage
+        run: |
+          cargo +nightly-2026-08-20 llvm-cov clean
+          cargo +nightly-2026-08-20 llvm-cov \
+            --all-features \
+            --all-targets \
+            --locked \
+            --branch \
+            --json \
+            --summary-only \
+            --output-path target/branch-coverage.json
+
+      - name: Enforce a nonzero 100 percent branch denominator
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("target/branch-coverage.json").read_text(encoding="utf-8"))
+          branches = payload["data"][0]["totals"]["branches"]
+          covered = branches["covered"]
+          count = branches["count"]
+          if count <= 0:
+              raise SystemExit("branch coverage denominator is zero")
+          if covered != count:
+              raise SystemExit(
+                  f"branch coverage is incomplete: {covered}/{count} "
+                  f"({branches['percent']:.6f}%)"
+              )
+          print(f"branch coverage: {covered}/{count} (100%)")
+          PY
