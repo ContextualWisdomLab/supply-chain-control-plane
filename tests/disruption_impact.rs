@@ -95,6 +95,14 @@ fn disruption_reachability_is_directional_deterministic_cycle_safe_and_explainab
             "edge-item-order",
         ]
     );
+    assert_eq!(
+        impact[2].event_evidence().source_record_key(),
+        "source-record-001"
+    );
+    assert_eq!(
+        impact[2].event_evidence().source_locator(),
+        "erp://shipment/alpha"
+    );
 }
 
 #[test]
@@ -103,7 +111,9 @@ fn graph_rejects_unproven_or_structurally_invalid_state() {
     assert!(EvidenceReference::new("record-1", " ").is_err());
 
     let mut graph = SupplyGraph::new();
-    graph.add_node("supplier-alpha", SupplyNodeKind::Supplier).unwrap();
+    graph
+        .add_node("supplier-alpha", SupplyNodeKind::Supplier)
+        .unwrap();
     assert_eq!(
         graph.add_node("supplier-alpha", SupplyNodeKind::Supplier),
         Err(GraphError::DuplicateNode("supplier-alpha".into()))
@@ -142,8 +152,12 @@ fn graph_rejects_unproven_or_structurally_invalid_state() {
 #[test]
 fn duplicate_edges_and_events_are_not_silently_overwritten() {
     let mut graph = SupplyGraph::new();
-    graph.add_node("supplier-alpha", SupplyNodeKind::Supplier).unwrap();
-    graph.add_node("facility-east", SupplyNodeKind::Facility).unwrap();
+    graph
+        .add_node("supplier-alpha", SupplyNodeKind::Supplier)
+        .unwrap();
+    graph
+        .add_node("facility-east", SupplyNodeKind::Facility)
+        .unwrap();
     graph
         .add_dependency(
             "supplier-alpha",
