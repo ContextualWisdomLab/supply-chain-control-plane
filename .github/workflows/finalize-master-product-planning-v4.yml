@@ -1,0 +1,301 @@
+name: Finalize master product planning v4
+
+on:
+  push:
+    branches: [docs/master-product-planning]
+    paths: [.github/workflows/finalize-master-product-planning-v4.yml]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  validate-attach-and-record:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact helper head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Validate candidate and publish exact-head receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH_NAME: docs/master-product-planning
+          BASE_BRANCH: feat/disruption-impact-foundation
+          EXPECTED_BASE_HEAD: 350a789144a42b54df387041fb2a05b043dd9bd3
+          EXPECTED_HELPER_HEAD: ${{ github.sha }}
+          PLANNING_TREE_SHA: cada8678f57babee27b8dae3bb2641cc8cf98b10
+          PARENT_PR_NUMBER: '1'
+        run: |
+          set -euo pipefail
+
+          current_ref() {
+            gh api "repos/${REPOSITORY}/git/ref/heads/$1" --jq '.object.sha'
+          }
+
+          test "$(current_ref "$BRANCH_NAME")" = "$EXPECTED_HELPER_HEAD"
+          test "$(current_ref "$BASE_BRANCH")" = "$EXPECTED_BASE_HEAD"
+
+          planning_commit="$(jq -n \
+            --arg message 'docs: establish complete supply-chain product planning baseline' \
+            --arg tree "$PLANNING_TREE_SHA" \
+            --arg parent "$EXPECTED_HELPER_HEAD" \
+            '{message: $message, tree: $tree, parents: [$parent]}' | \
+            gh api --method POST \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${REPOSITORY}/git/commits" \
+              --input - --jq '.sha')"
+          test -n "$planning_commit"
+
+          candidate_branch="docs/master-product-planning-candidate-${GITHUB_RUN_ID}"
+          cleanup_candidate() {
+            gh api --method DELETE "repos/${REPOSITORY}/git/refs/heads/${candidate_branch}" >/dev/null 2>&1 || true
+          }
+          trap cleanup_candidate EXIT
+          gh api --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/git/refs" \
+            -f ref="refs/heads/${candidate_branch}" \
+            -f sha="$planning_commit" >/dev/null
+
+          git fetch --no-tags origin "refs/heads/${candidate_branch}:refs/remotes/origin/${candidate_branch}"
+          git checkout --detach "$planning_commit"
+
+          STACK_BASE_COMMIT="$EXPECTED_BASE_HEAD" \
+          PLANNING_COMMIT="$planning_commit" \
+          VALIDATION_JSON="$RUNNER_TEMP/master-planning-validation.json" \
+          python3 <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path, PurePosixPath
+          from urllib.parse import unquote, urlsplit
+
+          root = Path.cwd().resolve()
+          markdown_files = sorted(root.rglob('*.md'))
+          if len(markdown_files) < 30:
+              raise SystemExit(f'expected at least 30 Markdown files, found {len(markdown_files)}')
+          texts = {path: path.read_text(encoding='utf-8') for path in markdown_files}
+          combined = '\n'.join(texts.values())
+
+          concepts = {
+              'product vision': r'(?i)product vision',
+              'context map': r'(?i)context map',
+              'ubiquitous language': r'(?i)ubiquitous language',
+              'data model': r'(?i)data model',
+              'ERD': r'\bERD\b|erDiagram',
+              'API contract': r'(?i)API contract|OpenAPI',
+              'event contract': r'(?i)event contract|AsyncAPI|CloudEvents',
+              'threat model': r'(?i)threat model',
+              'operability': r'(?i)operability',
+              'SLO': r'\bSLO\b',
+              'UX': r'\bUX\b|user experience',
+              'i18n': r'\bi18n\b|internationalization',
+              'roadmap': r'(?i)roadmap',
+              'SCOR': r'\bSCOR\b',
+              'EPCIS/CBV 2.0.1': r'EPCIS(?:\s*/\s*CBV|\s+and\s+CBV)?\s+2\.0\.1',
+          }
+          missing = [name for name, pattern in concepts.items() if not re.search(pattern, combined)]
+          if missing:
+              raise SystemExit('missing planning concepts: ' + ', '.join(missing))
+
+          proposed_adrs = sorted(root.glob('docs/adr/000[2-6]-*.md'))
+          if len(proposed_adrs) != 5:
+              raise SystemExit(f'expected five ADRs numbered 0002-0006, found {len(proposed_adrs)}')
+          status_pattern = re.compile(
+              r'(?im)(?:^#{1,3}\s*status\s*$\s*^Proposed\s*$|^status\s*:\s*Proposed\s*$)'
+          )
+          for path in proposed_adrs:
+              if not status_pattern.search(texts[path]):
+                  raise SystemExit(f'{path.relative_to(root)} must remain Proposed')
+
+          local_link_count = 0
+          for path, text in texts.items():
+              rel_path = path.relative_to(root).as_posix()
+              if text.count('```') % 2:
+                  raise SystemExit(f'unbalanced fenced block: {rel_path}')
+              if not rel_path.startswith('docs/superpowers/') and re.search(r'\b(?:TBD|FIXME)\b', text):
+                  raise SystemExit(f'placeholder marker remains: {rel_path}')
+              for match in re.finditer(r'!?(?:\[[^\]]*\])\(([^)]+)\)', text):
+                  raw = match.group(1).strip()
+                  target = raw.split()[0].strip('<>') if raw else ''
+                  if not target or target.startswith(('#', 'mailto:', 'data:')):
+                      continue
+                  parsed = urlsplit(target)
+                  if parsed.scheme or parsed.netloc:
+                      continue
+                  relative = unquote(parsed.path)
+                  if not relative:
+                      continue
+                  candidate = (path.parent / PurePosixPath(relative)).resolve()
+                  try:
+                      candidate.relative_to(root)
+                  except ValueError as exc:
+                      raise SystemExit(f'link escapes repository: {rel_path} -> {target}') from exc
+                  if not candidate.exists():
+                      raise SystemExit(f'broken local link: {rel_path} -> {target}')
+                  local_link_count += 1
+
+          changed = subprocess.check_output(
+              ['git', 'diff', '--name-only', f"{os.environ['STACK_BASE_COMMIT']}..{os.environ['PLANNING_COMMIT']}"],
+              text=True,
+          ).splitlines()
+          allowed_root_files = {
+              'README.md', 'AGENTS.md', 'ARCHITECTURE.md',
+              'CHANGELOG.md', 'CLAUDE.md', 'SECURITY.md',
+          }
+          invalid = [path for path in changed if not (path.startswith('docs/') or path in allowed_root_files)]
+          if invalid:
+              raise SystemExit('non-planning paths changed: ' + ', '.join(invalid))
+          forbidden = {'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'}
+          if any(path.startswith(('src/', 'tests/', '.github/')) or path in forbidden for path in changed):
+              raise SystemExit('runtime, test, workflow, package, or toolchain change detected')
+
+          diagram_count = sum(text.count('```mermaid') for text in texts.values())
+          erd_count = sum(text.count('erDiagram') for text in texts.values())
+          if diagram_count < 8 or erd_count < 1:
+              raise SystemExit(f'insufficient diagrams: Mermaid={diagram_count}, ERD={erd_count}')
+
+          canonical_repositories = {
+              'ContextualWisdomLab/.github', 'ContextualWisdomLab/ConceptWeave',
+              'ContextualWisdomLab/DiagramWeave', 'ContextualWisdomLab/EgressWeave',
+              'ContextualWisdomLab/EmbedRelay', 'ContextualWisdomLab/LineageWeave',
+              'ContextualWisdomLab/Orgmetra', 'ContextualWisdomLab/OriginWeave',
+              'ContextualWisdomLab/RankWeave', 'ContextualWisdomLab/TEPP',
+              'ContextualWisdomLab/ThreadWeave', 'ContextualWisdomLab/context-graph-contracts',
+              'ContextualWisdomLab/contextual-orchestrator',
+              'ContextualWisdomLab/enterprise-architecture-core',
+              'ContextualWisdomLab/fast-mlsirm',
+              'ContextualWisdomLab/governance-risk-compliance',
+              'ContextualWisdomLab/inkspan', 'ContextualWisdomLab/keyverse',
+              'ContextualWisdomLab/mhtml-etl-gateway', 'ContextualWisdomLab/noema',
+              'ContextualWisdomLab/pingora-gateway',
+              'ContextualWisdomLab/semantic-data-portal', 'ContextualWisdomLab/wardnet',
+          }
+          mentioned = sorted(name for name in canonical_repositories if name in combined)
+          if len(mentioned) < 10:
+              raise SystemExit(f'only {len(mentioned)} canonical CWL repository boundaries are explicit')
+
+          payload = {
+              'planning_commit': os.environ['PLANNING_COMMIT'],
+              'markdown_files': len(markdown_files),
+              'changed_paths': len(changed),
+              'local_links': local_link_count,
+              'mermaid_diagrams': diagram_count,
+              'mermaid_erds': erd_count,
+              'proposed_adrs': len(proposed_adrs),
+              'canonical_cwl_repositories': len(mentioned),
+          }
+          Path(os.environ['VALIDATION_JSON']).write_text(
+              json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          print(json.dumps(payload, sort_keys=True))
+          PY
+
+          test "$(current_ref "$BRANCH_NAME")" = "$EXPECTED_HELPER_HEAD"
+          test "$(current_ref "$BASE_BRANCH")" = "$EXPECTED_BASE_HEAD"
+          gh api --method PATCH \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/git/refs/heads/${BRANCH_NAME}" \
+            -f sha="$planning_commit" -F force=false >/dev/null
+          cleanup_candidate
+          trap - EXIT
+          test "$(current_ref "$BRANCH_NAME")" = "$planning_commit"
+
+          markdown_files="$(jq -r '.markdown_files' "$VALIDATION_JSON")"
+          changed_paths="$(jq -r '.changed_paths' "$VALIDATION_JSON")"
+          local_links="$(jq -r '.local_links' "$VALIDATION_JSON")"
+          mermaid_diagrams="$(jq -r '.mermaid_diagrams' "$VALIDATION_JSON")"
+          mermaid_erds="$(jq -r '.mermaid_erds' "$VALIDATION_JSON")"
+          proposed_adrs="$(jq -r '.proposed_adrs' "$VALIDATION_JSON")"
+          canonical_repos="$(jq -r '.canonical_cwl_repositories' "$VALIDATION_JSON")"
+
+          pr_number="$(gh pr list --repo "$REPOSITORY" --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$pr_number" ]; then
+            pr_url="$(gh pr create --repo "$REPOSITORY" --draft \
+              --base "$BASE_BRANCH" --head "$BRANCH_NAME" \
+              --title 'docs: establish complete Supply Chain Control Plane planning baseline' \
+              --body 'Master planning baseline; exact-head receipt follows.')"
+            pr_number="${pr_url##*/}"
+          fi
+
+          cat >"$RUNNER_TEMP/pr-body.md" <<EOF
+          ## Purpose
+
+          Add the complete master product-planning baseline for Supply Chain Control Plane as a planning-only stack above PR #1.
+
+          ## Stack and merge order
+
+          - parent: #1 at \`${BASE_BRANCH}\` / \`${EXPECTED_BASE_HEAD}\`
+          - child: #${pr_number} at \`${BRANCH_NAME}\`
+          - merge #1 first; then re-read ancestry and retarget #${pr_number} to \`main\` without force-push
+          - do not merge this child into the parent branch merely to reduce the open-PR count
+
+          ## Authority added
+
+          Product vision and outcomes; complete PRD/TRD; DDD Context Map, Ubiquitous Language, aggregates, invariants and state machines; 3NF/bitemporal model and ERD; API/event/adapter contracts; tenant security and threat model; deployment/SLO/recovery operations; operator/supplier UX, accessibility and eight-locale i18n; standards/research/commercialization traceability; roadmap; and an independently reviewable TDD implementation plan.
+
+          Five new ADRs remain **Proposed** until implementation evidence justifies a status transition.
+
+          ## Scope guard
+
+          The final diff changes planning/documentation paths only. It does not alter Rust source, tests, workflows, package metadata, toolchain, or runtime behavior. Deterministic evidence-linked graph reachability remains the only implemented product capability. Persistence, adapters, APIs, quantitative models, customer workflow, deployment and release are planned gaps until their own PRs prove them.
+
+          ## Exact-head validation receipt
+
+          - parent exact head: \`${EXPECTED_BASE_HEAD}\`
+          - child exact head: \`${planning_commit}\`
+          - Markdown files examined: ${markdown_files}
+          - planning-only changed paths: ${changed_paths}
+          - repository-local links resolved: ${local_links}
+          - Mermaid diagrams: ${mermaid_diagrams}, including ${mermaid_erds} ERD declarations
+          - Proposed ADRs 0002-0006: ${proposed_adrs}
+          - canonical CWL repository boundaries explicitly referenced: ${canonical_repos}
+          - temporary candidate ref deleted
+          - one-shot finalization workflows absent from the final tree
+
+          Validation covered UTF-8 decoding, required product/domain/data/contract/security/operations/UX/roadmap concepts, balanced fences, local links, ADR states, repository casing, diagrams and the planning-only diff against the parent exact head.
+
+          ## Standards boundary
+
+          SCOR DS is a process taxonomy. Traceability interoperability is based on GS1 EPCIS/CBV 2.0.1. These standards do not replace the domain model or create a certification claim.
+
+          ## Review boundary
+
+          Review consistency and explicit open gaps. Planned APIs, tables, SLOs, deployment profiles and models are not implementation evidence. Every check/review attached to an earlier child head is historical.
+          EOF
+          gh pr edit "$pr_number" --repo "$REPOSITORY" --body-file "$RUNNER_TEMP/pr-body.md"
+          gh pr ready "$pr_number" --repo "$REPOSITORY" || true
+
+          marker='<!-- master-product-planning-exact-head-receipt -->'
+          cat >"$RUNNER_TEMP/receipt.md" <<EOF
+          ${marker}
+          Master planning candidate validated and attached without force-push.
+
+          - child PR: #${pr_number}
+          - parent exact head: \`${EXPECTED_BASE_HEAD}\`
+          - child exact head: \`${planning_commit}\`
+          - ${markdown_files} Markdown files; ${changed_paths} planning-only changed paths
+          - ${local_links} local links; ${mermaid_diagrams} Mermaid diagrams; ${proposed_adrs} Proposed ADRs
+          - merge order: #1, then non-force retarget and revalidation of #${pr_number}
+          EOF
+          comment_id="$(gh api "repos/${REPOSITORY}/issues/${PARENT_PR_NUMBER}/comments?per_page=100" \
+            --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | tail -n 1)"
+          if [ -n "$comment_id" ]; then
+            jq -n --rawfile body "$RUNNER_TEMP/receipt.md" '{body: $body}' | \
+              gh api --method PATCH "repos/${REPOSITORY}/issues/comments/${comment_id}" --input - >/dev/null
+          else
+            jq -n --rawfile body "$RUNNER_TEMP/receipt.md" '{body: $body}' | \
+              gh api --method POST "repos/${REPOSITORY}/issues/${PARENT_PR_NUMBER}/comments" --input - >/dev/null
+          fi
+
+          echo "planning_commit=${planning_commit}"
+          echo "child_pr_number=${pr_number}"
