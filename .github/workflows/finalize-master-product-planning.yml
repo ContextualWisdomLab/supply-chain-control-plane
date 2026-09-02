@@ -1,0 +1,220 @@
+name: Finalize master product planning
+
+on:
+  push:
+    branches: [docs/master-product-planning]
+    paths: [.github/workflows/finalize-master-product-planning.yml]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-attach-and-open-pr:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout helper head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Validate candidate tree, fast-forward branch, and open stacked PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH_NAME: docs/master-product-planning
+          BASE_BRANCH: feat/disruption-impact-foundation
+          EXPECTED_HELPER_HEAD: ${{ github.sha }}
+          PLANNING_TREE_SHA: cada8678f57babee27b8dae3bb2641cc8cf98b10
+        run: |
+          set -euo pipefail
+
+          live_head="$(gh api "repos/${REPOSITORY}/git/ref/heads/${BRANCH_NAME}" --jq '.object.sha')"
+          test "$live_head" = "$EXPECTED_HELPER_HEAD"
+
+          payload="$(jq -n \
+            --arg message 'docs: establish complete supply-chain product planning baseline' \
+            --arg tree "$PLANNING_TREE_SHA" \
+            --arg parent "$EXPECTED_HELPER_HEAD" \
+            '{message: $message, tree: $tree, parents: [$parent]}')"
+          planning_commit="$(printf '%s' "$payload" | gh api \
+            --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/git/commits" \
+            --input - \
+            --jq '.sha')"
+          test -n "$planning_commit"
+
+          candidate_branch="docs/master-product-planning-candidate-${GITHUB_RUN_ID}"
+          cleanup_candidate() {
+            gh api --method DELETE "repos/${REPOSITORY}/git/refs/heads/${candidate_branch}" >/dev/null 2>&1 || true
+          }
+          trap cleanup_candidate EXIT
+
+          gh api \
+            --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/git/refs" \
+            -f ref="refs/heads/${candidate_branch}" \
+            -f sha="$planning_commit" >/dev/null
+
+          git fetch --no-tags origin "refs/heads/${candidate_branch}:refs/remotes/origin/${candidate_branch}"
+          git checkout --detach "$planning_commit"
+
+          BASE_COMMIT="$EXPECTED_HELPER_HEAD" PLANNING_COMMIT="$planning_commit" python3 <<'PY'
+          from __future__ import annotations
+
+          import os
+          import re
+          from pathlib import Path, PurePosixPath
+          from urllib.parse import unquote, urlsplit
+
+          root = Path.cwd()
+          markdown_files = sorted(root.rglob('*.md'))
+          if len(markdown_files) < 30:
+              raise SystemExit(f'expected at least 30 planning Markdown files, found {len(markdown_files)}')
+
+          combined = '\n'.join(path.read_text(encoding='utf-8') for path in markdown_files)
+          required_concepts = {
+              'product vision': r'(?i)product vision',
+              'context map': r'(?i)context map',
+              'ubiquitous language': r'(?i)ubiquitous language',
+              'data model': r'(?i)data model',
+              'ERD': r'\bERD\b|erDiagram',
+              'API contract': r'(?i)API contract|OpenAPI',
+              'event contract': r'(?i)event contract|AsyncAPI|CloudEvents',
+              'threat model': r'(?i)threat model',
+              'operability': r'(?i)operability',
+              'SLO': r'\bSLO\b',
+              'UX': r'\bUX\b|user experience',
+              'i18n': r'\bi18n\b|internationalization',
+              'roadmap': r'(?i)roadmap',
+              'SCOR': r'\bSCOR\b',
+              'EPCIS 2.0.1': r'EPCIS\s+2\.0\.1',
+          }
+          missing_concepts = [name for name, pattern in required_concepts.items() if not re.search(pattern, combined)]
+          if missing_concepts:
+              raise SystemExit('missing master-planning concepts: ' + ', '.join(missing_concepts))
+
+          proposed_adrs = sorted(root.glob('docs/adr/000[2-6]-*.md'))
+          if len(proposed_adrs) != 5:
+              raise SystemExit(f'expected five Proposed ADRs numbered 0002-0006, found {len(proposed_adrs)}')
+          for path in proposed_adrs:
+              text = path.read_text(encoding='utf-8')
+              if not re.search(r'(?im)^#{1,3}\s*status\s*$\s*^Proposed\s*$', text):
+                  raise SystemExit(f'{path} must remain Proposed')
+
+          for path in markdown_files:
+              text = path.read_text(encoding='utf-8')
+              if text.count('```') % 2:
+                  raise SystemExit(f'unbalanced fenced code block: {path}')
+              if 'docs/superpowers/' not in path.as_posix() and re.search(r'\b(?:TBD|FIXME)\b', text):
+                  raise SystemExit(f'placeholder marker remains: {path}')
+
+              for match in re.finditer(r'!?(?:\[[^\]]*\])\(([^)]+)\)', text):
+                  target = match.group(1).strip().split()[0].strip('<>')
+                  if not target or target.startswith(('#', 'mailto:', 'data:')):
+                      continue
+                  parsed = urlsplit(target)
+                  if parsed.scheme or parsed.netloc:
+                      continue
+                  relative = unquote(parsed.path)
+                  if not relative:
+                      continue
+                  candidate = (path.parent / PurePosixPath(relative)).resolve()
+                  try:
+                      candidate.relative_to(root.resolve())
+                  except ValueError as exc:
+                      raise SystemExit(f'link escapes repository: {path} -> {target}') from exc
+                  if not candidate.exists():
+                      raise SystemExit(f'broken local link: {path} -> {target}')
+
+          base = os.environ['BASE_COMMIT']
+          head = os.environ['PLANNING_COMMIT']
+          import subprocess
+          changed = subprocess.check_output(
+              ['git', 'diff', '--name-only', f'{base}..{head}'],
+              text=True,
+          ).splitlines()
+          allowed_roots = {
+              'README.md', 'AGENTS.md', 'ARCHITECTURE.md', 'CHANGELOG.md',
+              'CLAUDE.md', 'SECURITY.md',
+          }
+          invalid = [path for path in changed if not (path.startswith('docs/') or path in allowed_roots)]
+          if invalid:
+              raise SystemExit('non-planning paths changed: ' + ', '.join(invalid))
+          if any(path.startswith(('src/', 'tests/')) or path in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml'} for path in changed):
+              raise SystemExit('product implementation or Rust toolchain changed in planning stack')
+
+          diagram_count = sum(text.count('```mermaid') for text in (p.read_text(encoding='utf-8') for p in markdown_files))
+          if diagram_count < 8:
+              raise SystemExit(f'expected at least eight Mermaid architecture/data/workflow diagrams, found {diagram_count}')
+
+          print(f'planning validation passed: {len(markdown_files)} Markdown files, {len(changed)} changed paths, {diagram_count} Mermaid diagrams')
+          PY
+
+          live_head="$(gh api "repos/${REPOSITORY}/git/ref/heads/${BRANCH_NAME}" --jq '.object.sha')"
+          test "$live_head" = "$EXPECTED_HELPER_HEAD"
+          gh api \
+            --method PATCH \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/git/refs/heads/${BRANCH_NAME}" \
+            -f sha="$planning_commit" \
+            -F force=false >/dev/null
+          cleanup_candidate
+          trap - EXIT
+
+          final_head="$(gh api "repos/${REPOSITORY}/git/ref/heads/${BRANCH_NAME}" --jq '.object.sha')"
+          test "$final_head" = "$planning_commit"
+
+          existing_pr="$(gh pr list --repo "$REPOSITORY" --head "$BRANCH_NAME" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing_pr" ]; then
+            cat >"$RUNNER_TEMP/pr-body.md" <<EOF
+          ## Purpose
+
+          Add the complete master product-planning baseline for Supply Chain Control Plane as a documentation-only stack above PR #1.
+
+          ## Stack
+
+          - parent: #1 at \`${BASE_BRANCH}\`
+          - this PR: \`${BRANCH_NAME}\`
+          - merge order: #1 first, then this PR after non-force restack or automatic ancestry preservation
+
+          ## Planning authority added
+
+          - product vision, market boundary, users, outcomes, capability map and release stages
+          - complete PRD/TRD aligned with the implemented evidence-first disruption-impact slice
+          - DDD subdomains, bounded contexts, Context Map, Ubiquitous Language, aggregates, invariants and state machines
+          - 3NF/bitemporal data model, ERD, lineage, retention and data-quality contracts
+          - API, CloudEvents/AsyncAPI and source-adapter anti-corruption contracts
+          - tenant authorization, evidence confidentiality, audit, threat model and writeback safety
+          - deployment profiles, SLOs, observability, backup/restore, capacity and incident operations
+          - operator/supplier UX, accessibility and eight-locale i18n constraints
+          - standards crosswalk, APA 7th research traceability, commercialization evidence and roadmap
+          - five new ADRs retained as **Proposed** until implementation evidence supports a later status transition
+          - an implementation plan decomposed into independently reviewable TDD increments
+
+          ## Scope guard
+
+          No Rust source, tests, package metadata, toolchain or product runtime behavior changes. Existing graph reachability remains the only implemented product capability; persistence, adapters, APIs, quantitative models, workflow UI, deployment and release evidence remain planned gaps until their own PRs prove them.
+
+          ## Candidate validation
+
+          Before this branch was fast-forwarded, an isolated candidate ref verified UTF-8 Markdown, required planning concepts, five Proposed ADRs, balanced fences, repository-local links, diagram coverage and a documentation-only diff. The temporary ref and one-shot workflow are absent from the final tree.
+
+          ## External standards baseline
+
+          The plan uses SCOR DS only as a process taxonomy and pins traceability interoperability to GS1 EPCIS/CBV 2.0.1. External standards do not replace the product's domain model or create compliance claims.
+          EOF
+            gh pr create \
+              --repo "$REPOSITORY" \
+              --draft \
+              --base "$BASE_BRANCH" \
+              --head "$BRANCH_NAME" \
+              --title 'docs: establish complete Supply Chain Control Plane planning baseline' \
+              --body-file "$RUNNER_TEMP/pr-body.md"
+          fi
+
+          echo "planning_commit=${planning_commit}"
