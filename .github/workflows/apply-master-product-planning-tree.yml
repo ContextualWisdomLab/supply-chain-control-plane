@@ -1,0 +1,51 @@
+name: Apply master product planning tree
+
+on:
+  push:
+    branches: [docs/master-product-planning]
+    paths: [.github/workflows/apply-master-product-planning-tree.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-planning-tree:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Attach validated planning tree and retire this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          BRANCH_NAME: docs/master-product-planning
+          EXPECTED_HELPER_HEAD: ${{ github.sha }}
+          PLANNING_TREE_SHA: cada8678f57babee27b8dae3bb2641cc8cf98b10
+        run: |
+          set -euo pipefail
+
+          live_head="$(gh api "repos/${REPOSITORY}/git/ref/heads/${BRANCH_NAME}" --jq '.object.sha')"
+          test "$live_head" = "$EXPECTED_HELPER_HEAD"
+
+          payload="$(jq -n \
+            --arg message 'docs: establish complete supply-chain product planning baseline' \
+            --arg tree "$PLANNING_TREE_SHA" \
+            --arg parent "$EXPECTED_HELPER_HEAD" \
+            '{message: $message, tree: $tree, parents: [$parent]}')"
+          planning_commit="$(printf '%s' "$payload" | gh api \
+            --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/git/commits" \
+            --input - \
+            --jq '.sha')"
+
+          test -n "$planning_commit"
+          gh api \
+            --method PATCH \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${REPOSITORY}/git/refs/heads/${BRANCH_NAME}" \
+            -f sha="$planning_commit" \
+            -F force=false >/dev/null
+
+          final_head="$(gh api "repos/${REPOSITORY}/git/ref/heads/${BRANCH_NAME}" --jq '.object.sha')"
+          test "$final_head" = "$planning_commit"
+          echo "planning_commit=${planning_commit}"
