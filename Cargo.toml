@@ -1,0 +1,19 @@
+[package]
+name = "supply-chain-control-plane"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+description = "Evidence-first supply-chain disruption impact core"
+repository = "https://github.com/ContextualWisdomLab/supply-chain-control-plane"
+readme = "README.md"
+license = "Apache-2.0"
+
+[lib]
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
