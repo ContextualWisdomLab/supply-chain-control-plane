@@ -2,145 +2,160 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ContextualWisdomLab/supply-chain-control-plane)
 
-**Evidence-first disruption impact analysis for auditable supply networks.**
+**Evidence-first supply-chain decision and resilience control plane.**
 
-Supply Chain Control Plane turns supplier, facility, item, inventory, shipment, order, and production evidence into an explainable dependency view. Its first bounded product slice answers three questions without inventing unsupported risk scores:
+Supply Chain Control Plane connects customer-owned ERP, PLM, MES, QMS, WMS, TMS, SRM, carrier, partner, and traceability facts so teams can move from an observed disruption to an auditable decision and verified action. It does not replace those transactional systems or present an inferred relationship as operational truth.
 
-1. **What can this observed disruption affect downstream?**
-2. **Which admitted dependency path connects the disruption to each potential impact?**
-3. **What source evidence supports the disruption and every dependency edge on that path?**
+## Product promise
 
-The current core deliberately reports deterministic **potential impact by graph reachability**, not probability, severity, lead time, recovery time, or optimization advice. Quantitative claims belong behind separately validated models and evidence.
+```text
+observe a disruption
+→ validate identity, time, authority, and evidence
+→ trace deterministic downstream exposure
+→ quantify commitment impact with validated models
+→ compare feasible recovery scenarios
+→ approve an action
+→ execute through idempotent writeback
+→ verify the outcome and learn
+```
 
-## Why it exists
+Every material result is designed to retain its exact input snapshot, business-valid and recorded times, truth status, source evidence, dependency or constraint path, model/solver version, uncertainty or feasibility state, approval, writeback receipt, and observed outcome.
 
-Supply-chain incident response often fails at the handoff between raw operational facts and action: teams may know that a supplier, facility, shipment, or inventory position changed, but not which downstream obligations depend on it or why a system believes they are exposed.
+## Current implementation
 
-This repository establishes an evidence-preserving control-plane core where every admitted dependency and disruption remains traceable to a source reference and every downstream result carries its explanation path.
+The current foundation is a Rust 1.98.0 domain library. It implements only the evidence-linked deterministic exposure part of the product:
 
-| Need | What the current core provides |
+- typed supply nodes;
+- evidence-backed directed dependencies;
+- evidence-backed disruption events;
+- strict duplicate rejection;
+- replay-safe node, dependency, and event upserts with `Inserted`, `Unchanged`, and immutable-conflict outcomes;
+- cycle-safe downstream reachability;
+- deterministic shortest dependency paths, including equal-length alternatives;
+- originating event evidence and edge-aligned dependency evidence on every impact record; and
+- default diagnostic redaction of evidence locators while retaining explicit authorized access.
+
+This behavior is a **potential-impact** calculation. It is not probability, severity, shortage, lead time, causality, recovery time, or optimization advice.
+
+The repository does not yet contain production persistence, authenticated network APIs, real source adapters, quantitative recovery models, buyer UI, operational deployment, signed release artifacts, or customer deployment evidence.
+
+## Product boundary
+
+Supply Chain Control Plane owns the cross-system decision context:
+
+```text
+Network Registry
+Evidence Registry
+Event Registry
+Disruption Management
+Impact Assessment
+Recovery Scenario
+Decision Control
+Action Control
+Outcome Learning
+Model Governance
+```
+
+External authorities retain their own facts:
+
+| Fact | Authority retained outside this repository |
 | --- | --- |
-| Explainable disruption scope | Deterministic downstream reachability over explicit dependency facts |
-| Evidence drill-through | Originating event evidence plus one evidence reference per path edge |
-| Replay-safe ingestion boundary | Item upserts insert missing facts, no-op on exact replays, and reject same-key changed immutable content |
-| Secret-safe diagnostics | Evidence locators stay available to authorized drill-through code but are redacted from default Rust `Debug` output |
-| Stable results | Semantic ordering and deterministic shortest-path selection, including equal-length alternatives |
-| Fail-closed graph admission | Blank, duplicate, unknown-reference, direct self-dependency, and replay-conflict rejection |
-| Cycle safety | Traversal terminates without re-reporting the disrupted source |
-| Commercially usable source | Apache License 2.0 source grant; third-party terms remain separate |
+| Legal supplier, customer, and material master | ERP or MDM |
+| Bill of materials and routing | PLM, ERP, or MES |
+| Purchase and sales orders | ERP |
+| Physical inventory and warehouse tasks | WMS or ERP |
+| Production execution | MES |
+| Shipment execution and proof of delivery | TMS or carrier |
+| Quality inspection and disposition | QMS |
+| Credentials and identity federation | `keyverse` or a verified customer IdP |
+| Internal people, organization, position, and assignment | `Orgmetra` where adopted |
+| Formal risk acceptance and control evidence | `governance-risk-compliance` |
+| Application, capability, technology, and transformation truth | `enterprise-architecture-core` |
+| Ontology publication and semantic release | `ConceptWeave` |
+| Data catalog, glossary, lineage, and governed consumption | `semantic-data-portal` |
+| CWL product usage, pricing, and commercial entitlement | `metering-billing-platform` |
+| Accounting journals and financial statements | Customer accounting authority or `accounting-information-platform` where adopted |
 
-## Quick start
+Integrations use released, versioned anti-corruption contracts. Cross-system SQL, copied domain truth, mutable sibling branch heads, and production filesystem references to other repositories are prohibited.
 
-The current implementation is a Rust 1.98 domain library with no third-party runtime dependencies.
+## First commercial wedge
+
+The first complete buyer workflow is **Supply Disruption Impact and Recovery**:
+
+1. Admit a trusted event from EPCIS, ERP, WMS, TMS, a partner, or authorized human evidence.
+2. Resolve the affected object against a cross-system supply-network identity.
+3. Reproduce what was knowable at a declared knowledge cutoff.
+4. Trace materials, sites, capacity, inventory, shipments, orders, and commitments downstream.
+5. Quantify shortages and service exposure through validated models.
+6. Compare feasible responses under supply, capacity, lane, contract, quality, cost, and policy constraints.
+7. Bind a human approval to an immutable scenario result.
+8. Execute through an idempotent adapter and reconcile external state.
+9. Compare predicted and realized outcomes.
+
+## Standards and interoperability direction
+
+- ASCM SCOR Digital Standard supplies a process crosswalk, not the internal aggregate hierarchy.
+- GS1 EPCIS 2.0.1 and CBV 2.0.0 are the primary visibility-event interoperability targets.
+- UN/CEFACT Buy-Ship-Pay models inform international trade mappings.
+- W3C PROV-O informs provenance projections.
+- OpenAPI 3.2.0, AsyncAPI 3.0.0, CloudEvents 1.0.2, RFC 9457, and RFC 9562 define planned external contracts.
+- ISO 28000, ISO 20400, ISO 22301, NIST SP 800-161, and WCAG 2.2 inform security, procurement, resilience, software-supply-chain, and accessibility controls without creating certification claims.
+
+See [`docs/doctoring/research-traceability.md`](docs/doctoring/research-traceability.md) for the current research and standards evidence boundary.
+
+## Evaluate the current foundation
+
+No package or release artifact is published yet. Evaluate the implemented Rust slice from an exact source checkout:
 
 ```bash
+git clone https://github.com/ContextualWisdomLab/supply-chain-control-plane.git
+cd supply-chain-control-plane
 cargo test --all-targets --all-features --locked
 cargo clippy --all-targets --all-features --locked -- -D warnings
 cargo fmt --all -- --check
 ```
 
-The repository quality contract also measures exact owned coverage in CI. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the current executable gate rather than treating these local commands as a substitute for exact-head hosted evidence.
+These commands validate the bounded domain library; they do not start a network service or prove the planned buyer workflow.
 
-## Product boundary
+The current Product CI also enforces 100% line, function, and region coverage on stable Rust and a nonzero 100% branch denominator on the pinned nightly lane. Future owned production code retains 100% statement and branch coverage and complete public API documentation.
 
-Supply Chain Control Plane currently owns the **Disruption Impact** bounded context and its supporting evidence/network admission contracts.
+Quantitative production logic is Rust-first. CPU `f64` is the reference. Accelerated backends require parity evidence. A solver or model reports uncertainty, infeasibility, limit termination, and abstention rather than fabricating certainty.
 
-```text
-ERP / WMS / TMS / EPCIS / other source systems
-                    │
-                    │ future versioned anti-corruption adapters
-                    ▼
-        ┌──────────────────────────────┐
-        │  Supply Chain Control Plane  │
-        ├──────────────────────────────┤
-        │ evidence registry            │
-        │ network registry             │
-        │ disruption impact            │
-        │ deterministic path evidence  │
-        └──────────────┬───────────────┘
-                       │
-                       ▼
-          potential impacts + evidence
-                       │
-                       ▼
-             human / downstream action
-```
+## Documentation authority
 
-It does **not** replace ERP, WMS, TMS, EPCIS, procurement, inventory, or order systems of record. It also does not currently own probability estimation, severity scoring, recovery prediction, inventory optimization, authenticated external APIs, or customer-facing workflow UI.
+| Question | Authoritative document |
+| --- | --- |
+| What product is this and why will a buyer adopt it? | [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) |
+| Who uses it and what must it do? | [`docs/PRD.md`](docs/PRD.md) |
+| How must it be built and verified? | [`docs/TRD.md`](docs/TRD.md) |
+| Which bounded contexts and authorities exist? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| What do the domain terms, aggregates, and state machines mean? | [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md) |
+| Which UML views make behavior and deployment reviewable? | [`docs/UML.md`](docs/UML.md) |
+| How does it relate to CWL and customer systems? | [`docs/CONTEXT_MAP.md`](docs/CONTEXT_MAP.md) |
+| What is the normalized persistence model? | [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) |
+| What is the reviewable logical ERD? | [`docs/ERD.md`](docs/ERD.md) |
+| What are the HTTP contracts? | [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) |
+| What are the event contracts? | [`docs/EVENT_CONTRACT.md`](docs/EVENT_CONTRACT.md) |
+| What are the security boundaries and threats? | [`docs/SECURITY_AND_THREAT_MODEL.md`](docs/SECURITY_AND_THREAT_MODEL.md) |
+| How is the product operated and recovered? | [`docs/OPERABILITY.md`](docs/OPERABILITY.md) |
+| Which managed, private, disconnected, and evaluation deployments are supported? | [`docs/DEPLOYMENT_PROFILES.md`](docs/DEPLOYMENT_PROFILES.md) |
+| What evidence must tests provide? | [`docs/TEST_STRATEGY.md`](docs/TEST_STRATEGY.md) |
+| What will the buyer workflows and UI states be? | [`docs/UX.md`](docs/UX.md) |
+| Which research or standard supports which decision? | [`docs/doctoring/research-traceability.md`](docs/doctoring/research-traceability.md) |
+| What is implemented and what remains open? | [`docs/product-technical-gap-baseline.md`](docs/product-technical-gap-baseline.md) |
 
-External source systems remain authoritative for their own operational facts. Future adapters must enter through explicit versioned anti-corruption boundaries rather than cross-system application-table access or copied source truth.
-
-## Domain model
-
-The current aggregate is `SupplyGraph`.
-
-- **Supply nodes** represent disruption-relevant supplier, facility, item, inventory-position, shipment, and order identities.
-- **Dependency facts** are directed and evidence-backed: a downstream node depends on an upstream node.
-- **Supply events** identify an observed disruption at one node and retain an immutable evidence reference.
-- **Replay-oriented upserts** insert an absent node/dependency/event, no-op only for an exact semantic replay, and fail closed when an existing identity is paired with changed immutable content.
-- **Impact records** carry the potentially affected node, hop count, deterministic dependency path, event evidence, and edge-aligned dependency evidence.
-- **Evidence references** retain their full locator for explicit drill-through while default `Debug` output replaces the locator with `<redacted>` so ordinary diagnostics do not disclose token-bearing or customer-sensitive source locations.
-
-Admission fails closed for malformed semantic identity, unknown references, duplicate facts/events/nodes, direct self-dependencies, and replay conflicts. The path contract remains deterministic even when multiple shortest routes have equal length.
-
-## What is implemented now
-
-The current writer branch contains the first commercial foundation slice:
-
-- Rust-first, dependency-free domain core;
-- evidence-backed disruption events;
-- evidence-backed directed dependency facts;
-- replay-safe item upserts with explicit inserted/unchanged/conflict semantics;
-- evidence-locator debug redaction with a regression test covering token-bearing locators;
-- deterministic cycle-safe downstream reachability;
-- shortest-path explanation with edge-by-edge evidence;
-- originating disruption evidence retained on every impact result;
-- equal-length route determinism and evidence-alignment regression tests;
-- exact line/function/region coverage and nonzero branch-coverage gates;
-- PRD, TRD, DDD/architecture, security, research traceability, and commercialization-gap baselines.
-
-This is **pre-release candidate behavior until the branch integrates through repository governance**. There is no production persistence, authenticated service, deployment image, customer deployment, signed release, or released artifact yet.
-
-## Evidence and claim discipline
-
-A reachable node means only that an admitted dependency path connects it to the disrupted source. It does not mean the node will actually fail, that a shortage is probable, or that a particular mitigation is optimal.
-
-Any future quantitative severity, probability, recovery, or optimization capability must have an explicit mathematical owner, cited model basis, calibrated/validated evidence, uncertainty contract, and Rust implementation where it affects production results. Rule-of-thumb weights are not a substitute for that evidence.
-
-## Architecture and integration
-
-The current architecture separates three subdomain responsibilities:
-
-- **Core — Disruption Impact:** deterministic reachability and explainable impact paths.
-- **Supporting — Network Registry:** admitted supply nodes and dependency facts.
-- **Supporting — Evidence Registry:** source references attached to facts and events.
-- **Generic — identity, audit, transport, observability:** future infrastructure boundaries rather than domain truth.
-
-Persistence, source adapters, tenant/security boundaries, service transport, operability, and UI remain explicit product gaps. The code-current ownership and integration rules are documented in [`ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/PRD.md`](docs/PRD.md), and [`docs/TRD.md`](docs/TRD.md).
+The documentation landing page is [`docs/index.md`](docs/index.md).
 
 ## Current maturity
 
-This repository is an early product foundation, not a production or certification claim. The implemented domain behavior and quality gates can be evaluated now; commercialization still requires durable temporal persistence, real source adapters, tenant-safe authorization/audit, realistic interoperability evidence, operability/load/security evidence, user workflow, validated quantitative modeling where justified, and immutable release/provenance evidence.
-
-The exact gap/evidence matrix lives in [`docs/product-technical-gap-baseline.md`](docs/product-technical-gap-baseline.md).
-
-## Documentation map
-
-| Goal | Start here |
-| --- | --- |
-| Product requirements | [`docs/PRD.md`](docs/PRD.md) |
-| Technical requirements | [`docs/TRD.md`](docs/TRD.md) |
-| Architecture / DDD boundary | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
-| Architecture decision | [`docs/adr/0001-evidence-first-disruption-impact.md`](docs/adr/0001-evidence-first-disruption-impact.md) |
-| Research and standards traceability | [`docs/doctoring/research-traceability.md`](docs/doctoring/research-traceability.md) |
-| Product / technical gaps | [`docs/product-technical-gap-baseline.md`](docs/product-technical-gap-baseline.md) |
-| Security baseline | [`SECURITY.md`](SECURITY.md) |
-| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+The repository is an early pre-release foundation with an expanded planning baseline. Planning completeness does not imply implementation completeness. Release, deployment, certification, customer benefit, performance, and accuracy claims require the evidence named in the roadmap, test strategy, gap baseline, and release plan.
 
 ## Contributing
 
-Before changing domain behavior, read [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), the PRD/TRD, and the applicable architecture decision. Keep domain invariants, tests, documentation, and public claims on the same repository revision. Do not add heuristic risk weights or duplicate another system's authority as a convenience shortcut.
+Read [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md), the PRD/TRD, architecture, domain model, applicable ADRs, and the gap baseline before changing behavior. Use test-first development, preserve owner boundaries, update documentation and evidence on the same revision, and do not close a valid product delta without verified succession.
+
+Use [GitHub Issues](https://github.com/ContextualWisdomLab/supply-chain-control-plane/issues) for reproducible product and documentation defects. Report vulnerabilities through [`SECURITY.md`](SECURITY.md), not a public issue.
 
 ## License
 
-Supply Chain Control Plane is licensed under the [Apache License 2.0](LICENSE). The current crate has no third-party runtime dependencies; future dependencies and imported assets must retain their own terms and remain compatible with the repository's commercial-use policy.
+Supply Chain Control Plane is licensed under the [Apache License 2.0](LICENSE). That source grant does not grant rights to customer data, third-party standards, external SDKs, model artifacts, or future imported assets; each retains its own provenance and license boundary.
